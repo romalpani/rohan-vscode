@@ -15,10 +15,11 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IsAuxiliaryWindowContext } from '../../../../workbench/common/contextkeys.js';
+import { ActiveAuxiliaryContext, IsAuxiliaryWindowContext } from '../../../../workbench/common/contextkeys.js';
 import { IsPhoneLayoutContext, SessionsWelcomeVisibleContext } from '../../../common/contextkeys.js';
 import { logSessionsInteraction } from '../../../common/sessionsTelemetry.js';
 import { Menus } from '../../../browser/menus.js';
+import { CHANGES_VIEW_CONTAINER_ID } from '../../changes/common/changes.js';
 import { isWorkspaceAgentSessionType } from '../../../services/sessions/common/session.js';
 import { ISessionsManagementService } from '../../../services/sessions/common/sessionsManagement.js';
 import { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
@@ -39,10 +40,15 @@ registerAction2(class OpenSessionWorktreeInVSCodeAction extends Action2 {
 			icon: Codicon.vscodeInsiders,
 			precondition: ContextKeyExpr.and(IsAuxiliaryWindowContext.toNegated(), SessionsWelcomeVisibleContext.toNegated()),
 			menu: [{
-				id: Menus.TitleBarSessionMenu,
+				id: Menus.AuxiliaryBarTitle,
 				group: 'navigation',
-				order: 7,
-				when: ContextKeyExpr.and(IsAuxiliaryWindowContext.toNegated(), SessionsWelcomeVisibleContext.toNegated(), IsPhoneLayoutContext.negate()),
+				order: 2,
+				when: ContextKeyExpr.and(
+					IsAuxiliaryWindowContext.toNegated(),
+					SessionsWelcomeVisibleContext.toNegated(),
+					IsPhoneLayoutContext.negate(),
+					ActiveAuxiliaryContext.isEqualTo(CHANGES_VIEW_CONTAINER_ID),
+				),
 			}]
 		});
 	}

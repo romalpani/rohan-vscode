@@ -78,7 +78,7 @@ class OpenInVSCodeWidgetContribution extends Disposable implements IWorkbenchCon
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
-		this._register(actionViewItemService.register(Menus.TitleBarSessionMenu, OpenInVSCodeActionId, (action, options) => {
+		this._register(actionViewItemService.register(Menus.AuxiliaryBarTitle, OpenInVSCodeActionId, (action, options) => {
 			return instantiationService.createInstance(OpenInVSCodeTitleBarWidget, action, options);
 		}, undefined));
 	}

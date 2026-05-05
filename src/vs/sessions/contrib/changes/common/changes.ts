@@ -21,6 +21,11 @@ export const enum ChangesVersionMode {
 	LastTurn = 'lastTurn'
 }
 
+export const enum CodeViewMode {
+	Changes = 'changes',
+	AllFiles = 'allFiles'
+}
+
 export const enum IsolationMode {
 	Workspace = 'workspace',
 	Worktree = 'worktree'
@@ -29,7 +34,8 @@ export const enum IsolationMode {
 export const ChangesContextKeys = {
 	ChangeKind: new RawContextKey<'root' | 'folder' | 'file'>('sessions.changeKind', 'file'),
 	VersionMode: new RawContextKey<ChangesVersionMode>('sessions.changesVersionMode', ChangesVersionMode.BranchChanges),
-	ViewMode: new RawContextKey<ChangesViewMode>('sessions.changesViewMode', ChangesViewMode.List)
+	ViewMode: new RawContextKey<ChangesViewMode>('sessions.changesViewMode', ChangesViewMode.List),
+	CodeViewMode: new RawContextKey<CodeViewMode>('sessions.codeViewMode', CodeViewMode.Changes),
 };
 
 export const ActiveSessionContextKeys = {

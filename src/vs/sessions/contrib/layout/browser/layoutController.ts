@@ -13,9 +13,9 @@ import { IChatService } from '../../../../workbench/contrib/chat/common/chatServ
 import { IWorkbenchLayoutService, Parts } from '../../../../workbench/services/layout/browser/layoutService.js';
 import { ISessionsManagementService } from '../../../services/sessions/common/sessionsManagement.js';
 import { IViewsService } from '../../../../workbench/services/views/common/viewsService.js';
-import { CHANGES_VIEW_ID } from '../../changes/common/changes.js';
-import { SESSIONS_FILES_CONTAINER_ID } from '../../files/browser/files.contribution.js';
+import { CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID, ChangesContextKeys, CodeViewMode } from '../../changes/common/changes.js';
 import { SessionStatus } from '../../../services/sessions/common/session.js';
+import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 
 interface IPendingTurnState {
 	readonly hadChangesBeforeSend: boolean;
@@ -29,13 +29,18 @@ export class LayoutController extends Disposable {
 	private readonly _pendingTurnStateByResource = new ResourceMap<IPendingTurnState>();
 	private readonly _panelVisibilityBySession = new ResourceMap<boolean>();
 
+	private readonly _codeViewModeKey;
+
 	constructor(
 		@IWorkbenchLayoutService private readonly _layoutService: IWorkbenchLayoutService,
 		@ISessionsManagementService private readonly _sessionManagementService: ISessionsManagementService,
 		@IChatService private readonly _chatService: IChatService,
 		@IViewsService private readonly _viewsService: IViewsService,
+		@IContextKeyService private readonly _contextKeyService: IContextKeyService,
 	) {
 		super();
+
+		this._codeViewModeKey = ChangesContextKeys.CodeViewMode.bindTo(this._contextKeyService);
 
 		const activeSessionResourceObs = derivedOpts<URI | undefined>({
 			equalsFn: isEqual
@@ -136,12 +141,14 @@ export class LayoutController extends Disposable {
 	private _syncAuxiliaryBarVisibility(hasWorkspace: boolean, isUntitled: boolean, hasChanges: boolean): void {
 		if (!hasWorkspace) {
 			// Hide the auxiliary bar
-			this._viewsService.closeViewContainer(SESSIONS_FILES_CONTAINER_ID);
+			this._viewsService.closeViewContainer(CHANGES_VIEW_CONTAINER_ID);
 		} else if (isUntitled) {
 			// Show the auxiliary bar (files view)
-			this._viewsService.openViewContainer(SESSIONS_FILES_CONTAINER_ID, false);
+			this._codeViewModeKey.set(CodeViewMode.AllFiles);
+			this._viewsService.openViewContainer(CHANGES_VIEW_CONTAINER_ID, false);
 		} else if (hasChanges) {
 			// Show the auxiliary bar (changes view)
+			this._codeViewModeKey.set(CodeViewMode.Changes);
 			this._viewsService.openView(CHANGES_VIEW_ID, false);
 		}
 	}

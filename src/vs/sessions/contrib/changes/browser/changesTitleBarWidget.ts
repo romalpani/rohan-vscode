@@ -26,13 +26,13 @@ import { logChangesViewToggle } from '../../../common/sessionsTelemetry.js';
 import { CHANGES_VIEW_CONTAINER_ID } from '../common/changes.js';
 
 const TOGGLE_CHANGES_VIEW_ID = 'workbench.action.agentSessions.toggleChangesView';
-const TOGGLE_SECONDARY_SIDEBAR_TOOLTIP = localize('toggleSecondarySidebarTooltip', "Toggle Secondary Side Bar Visibility");
+const TOGGLE_SECONDARY_SIDEBAR_TOOLTIP = localize('toggleSecondarySidebarTooltip', "Toggle Code Panel Visibility");
 
 const secondarySidebarToggleClosedIcon = registerIcon('agent-secondary-sidebar-toggle-closed', Codicon.layoutSidebarRightOff, localize('agentSecondarySidebarToggleClosedIcon', "Icon for the sessions secondary sidebar when closed."));
 const secondarySidebarToggleOpenIcon = registerIcon('agent-secondary-sidebar-toggle-open', Codicon.layoutSidebarRight, localize('agentSecondarySidebarToggleOpenIcon', "Icon for the sessions secondary sidebar when open."));
 
 /**
- * Registers the Changes view toggle action in the titlebar session toolbar.
+ * Registers the Code view toggle action in the titlebar session toolbar.
  */
 export class ChangesTitleBarContribution extends Disposable implements IWorkbenchContribution {
 
@@ -45,13 +45,13 @@ export class ChangesTitleBarContribution extends Disposable implements IWorkbenc
 		this._register(MenuRegistry.appendMenuItem(Menus.TitleBarSessionMenu, {
 			command: {
 				id: TOGGLE_CHANGES_VIEW_ID,
-				title: localize2('showChanges', "Show Changes"),
+				title: localize2('showCode', "Show Code"),
 				tooltip: TOGGLE_SECONDARY_SIDEBAR_TOOLTIP,
 				icon: secondarySidebarToggleClosedIcon,
 				toggled: {
 					condition: AuxiliaryBarVisibleContext,
 					icon: secondarySidebarToggleOpenIcon,
-					title: localize('hideChanges', "Hide Changes"),
+					title: localize('hideCode', "Hide Code"),
 					tooltip: TOGGLE_SECONDARY_SIDEBAR_TOOLTIP,
 				},
 			},
@@ -67,13 +67,13 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: TOGGLE_CHANGES_VIEW_ID,
-			title: localize2('showChanges', "Show Changes"),
+			title: localize2('showCode', "Show Code"),
 			tooltip: TOGGLE_SECONDARY_SIDEBAR_TOOLTIP,
 			icon: secondarySidebarToggleClosedIcon,
 			toggled: {
 				condition: AuxiliaryBarVisibleContext,
 				icon: secondarySidebarToggleOpenIcon,
-				title: localize('hideChanges', "Hide Changes"),
+				title: localize('hideCode', "Hide Code"),
 				tooltip: TOGGLE_SECONDARY_SIDEBAR_TOOLTIP,
 			},
 			precondition: ContextKeyExpr.and(IsAuxiliaryWindowContext.toNegated(), SessionsWelcomeVisibleContext.toNegated()),

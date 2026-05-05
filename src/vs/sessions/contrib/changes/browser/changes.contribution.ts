@@ -10,29 +10,32 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../../workbench/common/contributions.js';
 import { IViewContainersRegistry, ViewContainerLocation, IViewsRegistry, Extensions as ViewContainerExtensions, WindowEnablement } from '../../../../workbench/common/views.js';
-import { CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID } from '../common/changes.js';
+import { CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID, ChangesContextKeys, CodeViewMode } from '../common/changes.js';
 import { ChangesViewPane, ChangesViewPaneContainer } from './changesView.js';
 import { ChangesTitleBarContribution } from './changesTitleBarWidget.js';
 import { IsPhoneLayoutContext } from '../../../common/contextkeys.js';
 import './changesViewActions.js';
 import './checksActions.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
+import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { SESSIONS_FILES_VIEW_ID, SESSIONS_FILES_EMPTY_VIEW_ID, SessionsExplorerView, SessionsExplorerEmptyView } from '../../files/browser/filesView.js';
+import { WorkspaceFolderCountContext } from '../../../../workbench/common/contextkeys.js';
 
-const changesViewIcon = registerIcon('changes-view-icon', Codicon.gitCompare, localize2('changesViewIcon', 'View icon for the Changes view.').value);
+const codeViewIcon = registerIcon('code-view-icon', Codicon.code, localize2('codeViewIcon', 'View icon for the Code view.').value);
 
 const viewContainersRegistry = Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegistry);
 
 const changesViewContainer = viewContainersRegistry.registerViewContainer({
 	id: CHANGES_VIEW_CONTAINER_ID,
-	title: localize2('changes', 'Changes'),
-	icon: changesViewIcon,
+	title: localize2('code', 'Code'),
+	icon: codeViewIcon,
 	order: 10,
 	ctorDescriptor: new SyncDescriptor(ChangesViewPaneContainer),
 	storageId: CHANGES_VIEW_CONTAINER_ID,
 	hideIfEmpty: false,
 	openCommandActionDescriptor: {
 		id: CHANGES_VIEW_CONTAINER_ID,
-		mnemonicTitle: localize({ key: 'miChanges', comment: ['&& denotes a mnemonic'] }, "Chan&&ges"),
+		mnemonicTitle: localize({ key: 'miCode', comment: ['&& denotes a mnemonic'] }, "Co&&de"),
 		keybindings: {
 			primary: 0,
 			win: { primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyG },
@@ -49,13 +52,44 @@ const viewsRegistry = Registry.as<IViewsRegistry>(ViewContainerExtensions.ViewsR
 viewsRegistry.registerViews([{
 	id: CHANGES_VIEW_ID,
 	name: localize2('changes', 'Changes'),
-	containerIcon: changesViewIcon,
+	containerIcon: codeViewIcon,
 	ctorDescriptor: new SyncDescriptor(ChangesViewPane),
 	canToggleVisibility: false,
 	canMoveView: false,
 	weight: 100,
 	order: 1,
-	when: IsPhoneLayoutContext.negate(),
+	when: ContextKeyExpr.and(IsPhoneLayoutContext.negate(), ChangesContextKeys.CodeViewMode.isEqualTo(CodeViewMode.Changes)),
+	windowEnablement: WindowEnablement.Sessions,
+}], changesViewContainer);
+
+// Files views inside the Code container (shown when toggled to "All Files")
+viewsRegistry.registerViews([{
+	id: SESSIONS_FILES_VIEW_ID,
+	name: localize2('files', "Files"),
+	containerIcon: codeViewIcon,
+	ctorDescriptor: new SyncDescriptor(SessionsExplorerView),
+	canToggleVisibility: false,
+	canMoveView: false,
+	when: ContextKeyExpr.and(
+		WorkspaceFolderCountContext.notEqualsTo('0'),
+		IsPhoneLayoutContext.negate(),
+		ChangesContextKeys.CodeViewMode.isEqualTo(CodeViewMode.AllFiles),
+	),
+	windowEnablement: WindowEnablement.Sessions,
+}], changesViewContainer);
+
+viewsRegistry.registerViews([{
+	id: SESSIONS_FILES_EMPTY_VIEW_ID,
+	name: localize2('files', "Files"),
+	containerIcon: codeViewIcon,
+	ctorDescriptor: new SyncDescriptor(SessionsExplorerEmptyView),
+	canToggleVisibility: false,
+	canMoveView: false,
+	when: ContextKeyExpr.and(
+		WorkspaceFolderCountContext.isEqualTo('0'),
+		IsPhoneLayoutContext.negate(),
+		ChangesContextKeys.CodeViewMode.isEqualTo(CodeViewMode.AllFiles),
+	),
 	windowEnablement: WindowEnablement.Sessions,
 }], changesViewContainer);
 
