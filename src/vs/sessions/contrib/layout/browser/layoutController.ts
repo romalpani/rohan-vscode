@@ -140,8 +140,8 @@ export class LayoutController extends Disposable {
 
 	private _syncAuxiliaryBarVisibility(hasWorkspace: boolean, isUntitled: boolean, hasChanges: boolean): void {
 		if (!hasWorkspace) {
-			// Hide the auxiliary bar
-			this._viewsService.closeViewContainer(CHANGES_VIEW_CONTAINER_ID);
+			// No workspace — the auxiliary bar stays visible (Preview tab is always available).
+			return;
 		} else if (isUntitled) {
 			// Show the auxiliary bar (files view)
 			this._codeViewModeKey.set(CodeViewMode.AllFiles);
