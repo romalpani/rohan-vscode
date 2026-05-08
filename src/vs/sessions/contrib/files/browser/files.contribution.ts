@@ -6,11 +6,10 @@
 import { Codicon } from '../../../../base/common/codicons.js';
 import { localize2 } from '../../../../nls.js';
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IViewsService } from '../../../../workbench/services/views/common/viewsService.js';
-import { ExplorerView } from '../../../../workbench/contrib/files/browser/views/explorerView.js';
-import { SESSIONS_FILES_VIEW_ID } from './filesView.js';
+import { ChangesContextKeys, CodeViewMode, CHANGES_VIEW_ID } from '../../changes/common/changes.js';
+import { ChangesViewPane } from '../../changes/browser/changesView.js';
 
 registerAction2(class extends Action2 {
 	constructor() {
@@ -19,18 +18,19 @@ registerAction2(class extends Action2 {
 			title: localize2('collapseExplorerFolders', "Collapse Folders in Explorer"),
 			icon: Codicon.collapseAll,
 			menu: {
-				id: MenuId.ViewTitle,
-				group: 'navigation',
-				when: ContextKeyExpr.equals('view', SESSIONS_FILES_VIEW_ID),
+				id: MenuId.ChatEditingSessionCodeOverflow,
+				group: '1_viewmode',
+				order: 10,
+				when: ChangesContextKeys.CodeViewMode.isEqualTo(CodeViewMode.AllFiles),
 			},
 		});
 	}
 
 	run(accessor: ServicesAccessor) {
 		const viewsService = accessor.get(IViewsService);
-		const view = viewsService.getViewWithId(SESSIONS_FILES_VIEW_ID);
-		if (view !== null) {
-			(view as ExplorerView).collapseAll();
+		const view = viewsService.getViewWithId(CHANGES_VIEW_ID);
+		if (view instanceof ChangesViewPane) {
+			view.collapseAllFiles();
 		}
 	}
 });

@@ -71,9 +71,17 @@ export class LayoutController extends Disposable {
 		});
 
 		// Switch between sessions — sync auxiliary bar (skip on mobile to avoid
-		// disruptive auto-expand on narrow viewports)
+		// disruptive auto-expand on narrow viewports). Only re-sync when the active
+		// session resource itself changes; we must not override the user's explicit
+		// view choice (Decisions / All Files) every time `hasChanges` flips.
 		if (!(isWeb && isMobile)) {
+			let lastSyncedResource: URI | undefined = undefined;
 			this._register(autorun(reader => {
+				const resource = activeSessionResourceObs.read(reader);
+				if (isEqual(resource, lastSyncedResource)) {
+					return;
+				}
+				lastSyncedResource = resource;
 				const isUntitled = activeSessionIsUntitledObs.read(reader);
 				const activeSessionHasWorkspace = activeSessionHasWorkspaceObs.read(reader);
 				const activeSessionHasChanges = activeSessionHasChangesObs.read(reader);

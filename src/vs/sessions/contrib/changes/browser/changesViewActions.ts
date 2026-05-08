@@ -5,7 +5,7 @@
 
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { localize, localize2 } from '../../../../nls.js';
+import { localize2 } from '../../../../nls.js';
 import { Action2, IAction2Options, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../../workbench/common/contributions.js';
@@ -14,16 +14,13 @@ import { ISessionsManagementService } from '../../../services/sessions/common/se
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { bindContextKey } from '../../../../platform/observable/common/platformObservableUtils.js';
 import { ActiveSessionContextKeys, CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID, ChangesContextKeys, CodeViewMode } from '../common/changes.js';
-import { ActiveAuxiliaryContext, IsSessionsWindowContext } from '../../../../workbench/common/contextkeys.js';
+import { IsSessionsWindowContext } from '../../../../workbench/common/contextkeys.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { ChatContextKeys } from '../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
 import { ChangesViewPane } from './changesView.js';
 import { URI } from '../../../../base/common/uri.js';
 import { isEqual } from '../../../../base/common/resources.js';
 import { IEditorService } from '../../../../workbench/services/editor/common/editorService.js';
-import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
-import { Menus } from '../../../browser/menus.js';
-import { SESSIONS_FILES_VIEW_ID } from '../../files/browser/filesView.js';
 
 const openChangesViewActionOptions: IAction2Options = {
 	id: 'workbench.action.agentSessions.openChangesView',
@@ -205,48 +202,33 @@ class OpenChangesAction extends Action2 {
 
 registerAction2(OpenChangesAction);
 
-// --- Toggle between Changes and All Files views ---
+// Switches the Code-tab view mode at root context-key scope (so the view registry
+// re-evaluates `when` clauses and shows the right view). Picker delegates here via
+// ICommandService because action items injected with a scoped IContextKeyService
+// cannot affect workbench-level view visibility.
+export const SET_CODE_VIEW_MODE_COMMAND_ID = 'workbench.action.agentSessions.setCodeViewMode';
 
-const TOGGLE_CODE_VIEW_MODE_ID = 'workbench.action.agentSessions.toggleCodeViewMode';
-
-const codeViewModeChangesIcon = registerIcon('code-view-mode-changes', Codicon.gitCompare, localize('codeViewModeChangesIcon', "Icon for the code view when showing changes."));
-const codeViewModeAllFilesIcon = registerIcon('code-view-mode-all-files', Codicon.files, localize('codeViewModeAllFilesIcon', "Icon for the code view when showing all files."));
-
-registerAction2(class ToggleCodeViewModeAction extends Action2 {
+registerAction2(class SetCodeViewModeAction extends Action2 {
 	constructor() {
 		super({
-			id: TOGGLE_CODE_VIEW_MODE_ID,
-			title: localize2('showAllFiles', "Show All Files"),
-			icon: codeViewModeAllFilesIcon,
-			tooltip: localize('showAllFiles', "Show All Files"),
-			toggled: {
-				condition: ChangesContextKeys.CodeViewMode.isEqualTo(CodeViewMode.AllFiles),
-				icon: codeViewModeChangesIcon,
-				title: localize('showChanges', "Show Changes"),
-				tooltip: localize('showChanges', "Show Changes"),
-			},
-			menu: [{
-				id: Menus.AuxiliaryBarTitle,
-				group: 'navigation',
-				order: 1,
-				when: ActiveAuxiliaryContext.isEqualTo(CHANGES_VIEW_CONTAINER_ID),
-			}],
+			id: SET_CODE_VIEW_MODE_COMMAND_ID,
+			title: localize2('setCodeViewMode', "Set Code View Mode"),
+			f1: false,
 		});
 	}
 
-	run(accessor: ServicesAccessor): void {
+	async run(accessor: ServicesAccessor, mode: CodeViewMode): Promise<void> {
+		if (mode !== CodeViewMode.Changes && mode !== CodeViewMode.AllFiles && mode !== CodeViewMode.Decisions) {
+			return;
+		}
 		const contextKeyService = accessor.get(IContextKeyService);
 		const viewsService = accessor.get(IViewsService);
 
-		// Read current value BEFORE bindTo, which resets to default
 		const current = contextKeyService.getContextKeyValue<string>(ChangesContextKeys.CodeViewMode.key);
-		const newMode = current === CodeViewMode.AllFiles ? CodeViewMode.Changes : CodeViewMode.AllFiles;
-		ChangesContextKeys.CodeViewMode.bindTo(contextKeyService).set(newMode);
-
-		if (newMode === CodeViewMode.AllFiles) {
-			viewsService.openView(SESSIONS_FILES_VIEW_ID, false);
-		} else {
-			viewsService.openView(CHANGES_VIEW_ID, false);
+		if (current !== mode) {
+			ChangesContextKeys.CodeViewMode.bindTo(contextKeyService).set(mode);
 		}
+		// Open the container so the now-visible view becomes active.
+		await viewsService.openViewContainer(CHANGES_VIEW_CONTAINER_ID, false);
 	}
 });

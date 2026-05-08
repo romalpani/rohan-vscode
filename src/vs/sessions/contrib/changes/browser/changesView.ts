@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/changesView.css';
+import '../../decisions/browser/media/decisionsView.css';
 import * as dom from '../../../../base/browser/dom.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { isWeb } from '../../../../base/common/platform.js';
-import { renderLabelWithIcons } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
+import { renderIcon, renderLabelWithIcons } from '../../../../base/browser/ui/iconLabel/iconLabels.js';
 import { IListVirtualDelegate } from '../../../../base/browser/ui/list/list.js';
 import { IObjectTreeElement, ITreeSorter } from '../../../../base/browser/ui/tree/tree.js';
 import { ActionRunner, IAction } from '../../../../base/common/actions.js';
@@ -17,7 +18,7 @@ import { Event } from '../../../../base/common/event.js';
 import { autorun, derived, derivedOpts, IObservable } from '../../../../base/common/observable.js';
 import { CountBadge } from '../../../../base/browser/ui/countBadge/countBadge.js';
 import { ProgressBar } from '../../../../base/browser/ui/progressbar/progressbar.js';
-import { basename, isEqual } from '../../../../base/common/resources.js';
+import { basename, dirname, isEqual } from '../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI } from '../../../../base/common/uri.js';
 import { localize, localize2 } from '../../../../nls.js';
@@ -26,7 +27,8 @@ import { MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolb
 import { ActionWidgetDropdownActionViewItem } from '../../../../platform/actions/browser/actionWidgetDropdownActionViewItem.js';
 import { MenuId, Action2, MenuItemAction, registerAction2, IMenuService } from '../../../../platform/actions/common/actions.js';
 import { IActionWidgetService } from '../../../../platform/actionWidget/browser/actionWidget.js';
-import { IActionWidgetDropdownActionProvider } from '../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
+import { IActionWidgetDropdownAction, IActionWidgetDropdownActionProvider } from '../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
+import { IViewsService } from '../../../../workbench/services/views/common/viewsService.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
@@ -52,7 +54,7 @@ import { IViewDescriptorService } from '../../../../workbench/common/views.js';
 import { CHAT_CATEGORY } from '../../../../workbench/contrib/chat/browser/actions/chatActions.js';
 import { IAgentSessionsService } from '../../../../workbench/contrib/chat/browser/agentSessions/agentSessionsService.js';
 import { ChatContextKeys } from '../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
-import { createFileIconThemableTreeContainerScope } from '../../../../workbench/contrib/files/browser/views/explorerView.js';
+import { createFileIconThemableTreeContainerScope, IExplorerViewPaneOptions } from '../../../../workbench/contrib/files/browser/views/explorerView.js';
 import { ACTIVE_GROUP, IEditorService, SIDE_GROUP } from '../../../../workbench/services/editor/common/editorService.js';
 import { IExtensionService } from '../../../../workbench/services/extensions/common/extensions.js';
 import { IWorkbenchLayoutService } from '../../../../workbench/services/layout/browser/layoutService.js';
@@ -70,7 +72,13 @@ import { EditorResourceAccessor, SideBySideEditor } from '../../../../workbench/
 import { logChangesViewFileSelect, logChangesViewVersionModeChange, logChangesViewViewModeChange } from '../../../common/sessionsTelemetry.js';
 import { ChecksViewModel } from './checksViewModel.js';
 import { AGENT_HOST_SKILL_BUTTON_UPDATE_PR_ID, isAgentHostSkillButtonId } from '../../agentHost/browser/agentHostSkillButtons.js';
-import { ActiveSessionContextKeys, CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID, ChangesContextKeys, ChangesVersionMode, ChangesViewMode, IsolationMode } from '../common/changes.js';
+import { ActiveSessionContextKeys, CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID, ChangesContextKeys, ChangesVersionMode, ChangesViewMode, CodeViewMode, IsolationMode } from '../common/changes.js';
+import { SET_CODE_VIEW_MODE_COMMAND_ID } from './changesViewActions.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { FileKind } from '../../../../platform/files/common/files.js';
+import { IDecision, IDecisionEvidenceFile, IDecisionsService } from '../../../services/decisions/common/decisions.js';
+import { SessionsExplorerView, SESSIONS_FILES_VIEW_ID } from '../../files/browser/filesView.js';
+
 import { buildTreeChildren, ChangesTreeElement, ChangesTreeRenderer, IChangesFileItem, IChangesTreeRootInfo, isChangesFileItem, toIChangesFileItem } from './changesViewRenderer.js';
 import { ChangesViewModel } from './changesViewModel.js';
 import { ResourceTree } from '../../../../base/common/resourceTree.js';
@@ -244,6 +252,31 @@ export class ChangesViewPane extends ViewPane {
 	private splitView: SplitView | undefined;
 	private splitViewContainer: HTMLElement | undefined;
 
+	// Code-tab swappable body sections (Option B): the toolbar (filesHeaderNode) is hoisted
+	// to the body container so it stays mounted while the body content swaps between
+	// Changes / All Files / Decisions modes.
+	private changesBodySection: HTMLElement | undefined;
+	private filesBodySection: HTMLElement | undefined;
+	private decisionsBodySection: HTMLElement | undefined;
+
+	// Last known body dimensions, updated in layoutBody(). Used to layout embedded views.
+	private _bodyHeight: number = 0;
+	private _bodyWidth: number = 0;
+
+	// Lazily-initialized All Files explorer.
+	private _filesView: SessionsExplorerView | undefined;
+	// Container that holds either the file explorer or the empty welcome message
+	// (depending on whether the workspace has any folders).
+	private _filesEmptyState: HTMLElement | undefined;
+	// Whether we've already installed the workspace-folders listener (one-time setup).
+	private _filesSectionListenerInstalled = false;
+
+	// Decisions section state.
+	private _decisionsList: HTMLElement | undefined;
+	private _decisionsEmptyState: HTMLElement | undefined;
+	private readonly _decisionsExpandedIds = new Set<string>();
+	private readonly _decisionsRenderDisposables = this._register(new DisposableStore());
+
 	private readonly isMergeBaseBranchProtectedContextKey: IContextKey<boolean>;
 	private readonly isolationModeContextKey: IContextKey<IsolationMode>;
 	private readonly hasGitRepositoryContextKey: IContextKey<boolean>;
@@ -260,7 +293,6 @@ export class ChangesViewPane extends ViewPane {
 	private readonly renderDisposables = this._register(new DisposableStore());
 
 	// Track current body dimensions for list layout
-	private currentBodyHeight = 0;
 	private currentBodyWidth = 0;
 
 	readonly viewModel: ChangesViewModel;
@@ -281,8 +313,10 @@ export class ChangesViewPane extends ViewPane {
 		@ILabelService private readonly labelService: ILabelService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IDecisionsService private readonly decisionsService: IDecisionsService,
+		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 	) {
-		super({ ...options, titleMenuId: MenuId.ChatEditingSessionTitleToolbar }, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
+		super({ ...options }, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
 
 		this.viewModel = this.instantiationService.createInstance(ChangesViewModel);
 		this._register(this.viewModel);
@@ -330,11 +364,51 @@ export class ChangesViewPane extends ViewPane {
 
 		this.bodyContainer = dom.append(container, $('.changes-view-body'));
 
-		// Actions container - positioned outside and above the card
-		this.actionsContainer = dom.append(this.bodyContainer, $('.chat-editing-session-actions.outside-card'));
+		// --- Toolbar (always visible across all Code-tab modes) ---
+		// Hoisted out of the splitView/contentContainer so that switching modes never
+		// destroys it. Hidden when no active session so it doesn't render against an
+		// empty state.
+		this.filesHeaderNode = dom.append(this.bodyContainer, $('.changes-files-header'));
 
-		// SplitView container for resizable file tree / CI checks split
-		this.splitViewContainer = dom.append(this.bodyContainer, $('.changes-splitview-container'));
+		const filesHeaderToolbarContainer = dom.append(this.filesHeaderNode, $('.changes-files-header-toolbar'));
+		this._register(this.scopedInstantiationService.createInstance(MenuWorkbenchToolBar, filesHeaderToolbarContainer, MenuId.ChatEditingSessionChangesFileHeaderToolbar, {
+			menuOptions: { shouldForwardArgs: true },
+			actionViewItemProvider: (action) => {
+				if (action.id === 'chatEditing.versionsPicker' && action instanceof MenuItemAction) {
+					return this.scopedInstantiationService.createInstance(ChangesPickerActionItem, action);
+				}
+				return undefined;
+			},
+		}));
+
+		// Inline action buttons (Merge / Mark as Done / Review / Open in VS Code).
+		// Populated lazily in `onVisible` once the view model is available.
+		this.actionsContainer = dom.append(this.filesHeaderNode, $('.chat-editing-session-actions.inline'));
+
+		// Overflow toolbar (List / Tree view modes).
+		const overflowContainer = dom.append(this.filesHeaderNode, $('.changes-files-header-overflow'));
+		this._register(this.scopedInstantiationService.createInstance(MenuWorkbenchToolBar, overflowContainer, MenuId.ChatEditingSessionCodeOverflow, {
+			menuOptions: { shouldForwardArgs: true },
+		}));
+
+		this.filesCountBadge = dom.append(this.filesHeaderNode, $('.changes-files-count'));
+		this.filesCountBadge.style.display = 'none';
+
+		// Hide the entire toolbar row when there is no active session.
+		this._register(autorun(reader => {
+			const hasActiveSession = !!this.sessionManagementService.activeSession.read(reader);
+			this.filesHeaderNode!.style.display = hasActiveSession ? '' : 'none';
+		}));
+
+		// --- Body sections (one per mode; swap visibility, never unmount) ---
+		this.changesBodySection = dom.append(this.bodyContainer, $('.changes-mode-section'));
+		this.filesBodySection = dom.append(this.bodyContainer, $('.changes-mode-section'));
+		this.decisionsBodySection = dom.append(this.bodyContainer, $('.changes-mode-section'));
+		this.filesBodySection.style.display = 'none';
+		this.decisionsBodySection.style.display = 'none';
+
+		// SplitView container for the Changes mode (file tree + CI checks).
+		this.splitViewContainer = dom.append(this.changesBodySection, $('.changes-splitview-container'));
 
 		// Main container with file icons support (the "card") — top pane
 		this.contentContainer = dom.append(this.splitViewContainer, $('.chat-editing-session-container.show-file-icons'));
@@ -346,23 +420,6 @@ export class ChangesViewPane extends ViewPane {
 		};
 		updateHasFileIcons();
 		this._register(this.themeService.onDidFileIconThemeChange(updateHasFileIcons));
-
-		// Files header
-		this.filesHeaderNode = dom.append(this.contentContainer, $('.changes-files-header'));
-
-		const filesHeaderToolbarContainer = dom.append(this.filesHeaderNode, $('.changes-files-header-toolbar'));
-		this._register(this.scopedInstantiationService.createInstance(MenuWorkbenchToolBar, filesHeaderToolbarContainer, MenuId.ChatEditingSessionChangesFileHeaderToolbar, {
-			menuOptions: { shouldForwardArgs: true },
-			actionViewItemProvider: (action) => {
-				if (action.id === 'chatEditing.versionsPicker' && action instanceof MenuItemAction) {
-					return this.scopedInstantiationService.createInstance(ChangesPickerActionItem, action, this.viewModel);
-				}
-				return undefined;
-			},
-		}));
-
-		this.filesCountBadge = dom.append(this.filesHeaderNode, $('.changes-files-count'));
-		this.filesCountBadge.style.display = 'none';
 
 		// Overview section (header with summary only - actions moved outside card)
 		this.overviewContainer = dom.append(this.contentContainer, $('.chat-editing-session-overview'));
@@ -478,6 +535,19 @@ export class ChangesViewPane extends ViewPane {
 			}
 		}));
 
+		// --- Code-tab mode swapping ---
+		// React to changes in the global `CodeViewMode` context key by toggling which
+		// body section is visible. The toolbar (filesHeaderNode) stays mounted across
+		// all modes.
+		const codeViewModeKey = ChangesContextKeys.CodeViewMode.key;
+		const modeKeySet: ReadonlySet<string> = new Set([codeViewModeKey]);
+		this._register(this.contextKeyService.onDidChangeContext(e => {
+			if (e.affectsSome(modeKeySet)) {
+				this._syncViewMode();
+			}
+		}));
+		this._syncViewMode();
+
 		// Trigger initial render if already visible
 		if (this.isBodyVisible()) {
 			this.onVisible();
@@ -555,22 +625,19 @@ export class ChangesViewPane extends ViewPane {
 				dom.setVisibility(activeSessionStatus !== undefined && activeSessionStatus !== SessionStatus.Untitled, this.actionsContainer);
 			}
 
-			const hasGitRepository = this.viewModel.activeSessionHasGitRepositoryObs.read(reader);
-
 			const { files } = topLevelStats.read(reader);
 			const hasEntries = files > 0;
 
-			// Show the files header whenever the session is git-backed (so users
-			// can switch version modes) or there are session-provided entries to
-			// count (for non-git sessions like the local agent host).
-			dom.setVisibility(hasGitRepository || hasEntries, this.filesHeaderNode!);
+			// Files header visibility is owned by the renderBody-level autorun that
+			// reacts to active-session presence — don't override it here.
 
 			dom.setVisibility(hasEntries, this.listContainer!);
 			dom.setVisibility(!hasEntries, this.welcomeContainer!);
 
+			// File-count badge is hidden for now (kept in DOM in case we want to
+			// re-enable it later). Update the text but keep `display: none`.
 			if (this.filesCountBadge) {
 				this.filesCountBadge.textContent = `${files}`;
-				this.filesCountBadge.style.display = '';
 			}
 
 			this.layoutSplitView();
@@ -713,27 +780,24 @@ export class ChangesViewPane extends ViewPane {
 		if (!this.tree) {
 			return;
 		}
-		// Subtract overview/padding within the content container
+		// Subtract overview height (the toolbar lives in the body container, not here).
 		const overviewHeight = this.overviewContainer?.offsetHeight ?? 0;
-		const filesHeaderHeight = this.filesHeaderNode?.offsetHeight ?? 0;
-		const treeHeight = Math.max(0, paneHeight - filesHeaderHeight - overviewHeight);
+		const treeHeight = Math.max(0, paneHeight - overviewHeight);
 		this.tree.layout(treeHeight, this.currentBodyWidth);
 		this.tree.getHTMLElement().style.height = `${treeHeight}px`;
 	}
 
-	/** Layout the SplitView to fill available body space. */
+	/** Layout the SplitView to fill the available space inside `changesBodySection`. */
 	private layoutSplitView(): void {
-		if (!this.splitView || !this.splitViewContainer) {
+		if (!this.splitView || !this.splitViewContainer || !this.changesBodySection) {
 			return;
 		}
-		const bodyHeight = this.currentBodyHeight;
-		if (bodyHeight <= 0) {
+		// `changesBodySection` is a flex child that already gets the leftover height
+		// after the always-visible toolbar — use its measured height directly.
+		const availableHeight = this.changesBodySection.clientHeight;
+		if (availableHeight <= 0) {
 			return;
 		}
-		const bodyPadding = 16; // 8px top + 8px bottom from .changes-view-body
-		const actionsHeight = this.actionsContainer?.offsetHeight ?? 0;
-		const actionsMargin = actionsHeight > 0 ? 8 : 0;
-		const availableHeight = Math.max(0, bodyHeight - bodyPadding - actionsHeight - actionsMargin);
 		this.splitViewContainer.style.height = `${availableHeight}px`;
 		this.splitView.layout(availableHeight);
 	}
@@ -802,9 +866,325 @@ export class ChangesViewPane extends ViewPane {
 
 	protected override layoutBody(height: number, width: number): void {
 		super.layoutBody(height, width);
-		this.currentBodyHeight = height;
 		this.currentBodyWidth = width;
+		this._bodyHeight = height;
+		this._bodyWidth = width;
 		this.layoutSplitView();
+		this._layoutFilesView();
+	}
+
+	// --- Code-tab mode swapping (Option B) ---
+
+	/**
+	 * Reads the current `CodeViewMode` from the global context key service and
+	 * shows the matching body section while hiding the others. Lazily initializes
+	 * the All Files explorer and the Decisions section the first time each is
+	 * requested.
+	 */
+	private _syncViewMode(): void {
+		if (!this.changesBodySection || !this.filesBodySection || !this.decisionsBodySection) {
+			return;
+		}
+
+		const mode = this.contextKeyService.getContextKeyValue<CodeViewMode>(ChangesContextKeys.CodeViewMode.key) ?? CodeViewMode.Changes;
+
+		this.changesBodySection.style.display = mode === CodeViewMode.Changes ? '' : 'none';
+		this.filesBodySection.style.display = mode === CodeViewMode.AllFiles ? '' : 'none';
+		this.decisionsBodySection.style.display = mode === CodeViewMode.Decisions ? '' : 'none';
+
+		try {
+			if (mode === CodeViewMode.AllFiles) {
+				this._initFilesSection();
+				this._layoutFilesView();
+			} else if (mode === CodeViewMode.Decisions) {
+				this._initDecisionsSection();
+			} else {
+				// Changes mode — reflow now that the splitView container is visible again.
+				this.layoutSplitView();
+			}
+		} catch (err) {
+			// Don't let a single mode's lazy init blank out the entire Code pane —
+			// log and continue so the toolbar and other modes remain usable.
+			this.logService.error(`[ChangesViewPane] Failed to initialize Code-tab mode '${mode}'`, err);
+		}
+	}
+
+	/** Collapse all folders in the embedded file explorer. */
+	collapseAllFiles(): void {
+		this._filesView?.collapseAll();
+	}
+
+	/** Lazily mount a `SessionsExplorerView` inside `filesBodySection`. */
+	private _initFilesSection(): void {
+		if (!this.filesBodySection) {
+			return;
+		}
+
+		// One-time setup: react to workspace folder changes so we can swap between
+		// the explorer and the empty welcome state when a session populates the workspace.
+		if (!this._filesSectionListenerInstalled) {
+			this._filesSectionListenerInstalled = true;
+			this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => {
+				if (this.filesBodySection?.style.display !== 'none') {
+					this._initFilesSection();
+					this._layoutFilesView();
+				}
+			}));
+		}
+
+		const hasFolders = this.workspaceContextService.getWorkspace().folders.length > 0;
+
+		if (!hasFolders) {
+			// Inline empty welcome state when no workspace folders.
+			if (this._filesView) {
+				this._filesView.element.style.display = 'none';
+			}
+			if (!this._filesEmptyState) {
+				this._filesEmptyState = dom.append(this.filesBodySection, $('.files-empty-view-body'));
+				const welcomeContainer = dom.append(this._filesEmptyState, $('.files-empty-welcome'));
+				const welcomeIcon = dom.append(welcomeContainer, $('.files-empty-welcome-icon'));
+				welcomeIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.files));
+				const welcomeMessage = dom.append(welcomeContainer, $('.files-empty-welcome-message'));
+				welcomeMessage.textContent = localize('filesView.noFiles', "Folders and files will appear here.");
+			}
+			this._filesEmptyState.style.display = '';
+			return;
+		}
+
+		// Workspace has folders — show (or create) the explorer.
+		if (this._filesEmptyState) {
+			this._filesEmptyState.style.display = 'none';
+		}
+		if (this._filesView) {
+			this._filesView.element.style.display = '';
+			return;
+		}
+
+		const filesViewOptions: IExplorerViewPaneOptions = {
+			id: SESSIONS_FILES_VIEW_ID,
+			title: localize('codeTab.allFiles', "All Files"),
+			delegate: {
+				willOpenElement: () => { /* no-op: embedded explorer */ },
+				didOpenElement: () => { /* no-op: embedded explorer */ },
+			},
+		};
+		this._filesView = this._register(this.scopedInstantiationService.createInstance(SessionsExplorerView, filesViewOptions));
+		this._filesView.render();
+		this._filesView.headerVisible = false;
+		this.filesBodySection.appendChild(this._filesView.element);
+
+		// Layout BEFORE setVisible so the tree has a non-zero size when `setTreeInput()`
+		// is fired by the body-visibility change. Otherwise the async setInput resolves
+		// before any layout pass and the virtualized tree renders empty.
+		this._layoutFilesView();
+		this._filesView.setVisible(true);
+		this._layoutFilesView();
+	}
+
+	/** Layout the embedded files explorer to fill `filesBodySection`. */
+	private _layoutFilesView(): void {
+		if (!this._filesView || !this.filesBodySection || this.filesBodySection.style.display === 'none') {
+			return;
+		}
+		// Prefer DOM measurements; fall back to last known body dimensions from layoutBody().
+		const height = this.filesBodySection.clientHeight || this._bodyHeight;
+		const width = this.filesBodySection.clientWidth || this._bodyWidth;
+		if (height <= 0 || width <= 0) {
+			return;
+		}
+		this._filesView.orthogonalSize = width;
+		this._filesView.layout(height);
+	}
+
+	/**
+	 * Lazily build the decisions section DOM and bind it to the decisions service.
+	 * This intentionally inlines the rendering logic from `SessionsDecisionsView` so
+	 * the Code tab can swap content without ever unmounting the surrounding pane
+	 * (which would also unmount the toolbar).
+	 */
+	private _initDecisionsSection(): void {
+		if (this._decisionsList || !this.decisionsBodySection) {
+			return;
+		}
+
+		const root = dom.append(this.decisionsBodySection, $('.sessions-decisions-body'));
+		this._register(createFileIconThemableTreeContainerScope(root, this.themeService));
+
+		this._decisionsList = dom.append(root, $('.sessions-decisions-list'));
+
+		this._decisionsEmptyState = dom.append(root, $('.sessions-decisions-empty'));
+		const emptyIcon = dom.append(this._decisionsEmptyState, $('.sessions-decisions-empty-icon'));
+		emptyIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.lightbulb));
+		const emptyMessage = dom.append(this._decisionsEmptyState, $('.sessions-decisions-empty-message'));
+		emptyMessage.textContent = localize('decisions.empty.message', "Decisions will appear here once the agent makes changes.");
+
+		this._register(autorun(reader => {
+			const decisions = this.decisionsService.decisions.read(reader);
+			this._renderDecisions(decisions);
+		}));
+	}
+
+	private _renderDecisions(decisions: readonly IDecision[]): void {
+		if (!this._decisionsList || !this._decisionsEmptyState) {
+			return;
+		}
+		this._decisionsRenderDisposables.clear();
+
+		// Drop any stale expanded ids whose decisions no longer exist.
+		const validIds = new Set(decisions.map(d => d.id));
+		for (const id of [...this._decisionsExpandedIds]) {
+			if (!validIds.has(id)) {
+				this._decisionsExpandedIds.delete(id);
+			}
+		}
+
+		const isEmpty = decisions.length === 0;
+		this._decisionsList.style.display = isEmpty ? 'none' : '';
+		this._decisionsEmptyState.style.display = isEmpty ? '' : 'none';
+
+		dom.clearNode(this._decisionsList);
+		if (isEmpty) {
+			return;
+		}
+
+		for (const decision of decisions) {
+			this._decisionsList.appendChild(this._renderDecision(decision));
+		}
+	}
+
+	private _renderDecision(decision: IDecision): HTMLElement {
+		const row = $('.sessions-decisions-row');
+		const isExpanded = this._decisionsExpandedIds.has(decision.id);
+		row.classList.toggle('expanded', isExpanded);
+
+		const header = dom.append(row, $('button.sessions-decisions-row-header'));
+		header.setAttribute('aria-expanded', String(isExpanded));
+		header.setAttribute('aria-label', decision.title);
+		header.setAttribute('type', 'button');
+
+		const caret = dom.append(header, $('.sessions-decisions-row-caret'));
+		caret.appendChild(renderIcon(isExpanded ? Codicon.chevronDown : Codicon.chevronRight));
+
+		const text = dom.append(header, $('.sessions-decisions-row-text'));
+		const title = dom.append(text, $('.sessions-decisions-row-title'));
+		title.textContent = decision.title;
+		if (decision.rationale) {
+			const rationale = dom.append(text, $('.sessions-decisions-row-rationale'));
+			rationale.textContent = decision.rationale;
+			rationale.title = decision.rationale;
+		}
+		this._renderDecisionStats(text, decision);
+
+		this._decisionsRenderDisposables.add(dom.addDisposableListener(header, dom.EventType.CLICK, () => {
+			if (this._decisionsExpandedIds.has(decision.id)) {
+				this._decisionsExpandedIds.delete(decision.id);
+			} else {
+				this._decisionsExpandedIds.add(decision.id);
+			}
+			this._renderDecisions(this.decisionsService.decisions.get());
+		}));
+
+		if (isExpanded) {
+			const body = dom.append(row, $('.sessions-decisions-row-body'));
+			const resourceLabels = this._decisionsRenderDisposables.add(this.instantiationService.createInstance(
+				ResourceLabels,
+				{ onDidChangeVisibility: this.onDidChangeBodyVisibility }
+			));
+			for (const file of decision.evidence) {
+				body.appendChild(this._renderDecisionFile(file, resourceLabels));
+			}
+		}
+
+		return row;
+	}
+
+	private _renderDecisionFile(file: IDecisionEvidenceFile, resourceLabels: ResourceLabels): HTMLElement {
+		const fileRow = $('button.sessions-decisions-file');
+		fileRow.setAttribute('type', 'button');
+
+		const labelContainer = dom.append(fileRow, $('.sessions-decisions-file-label'));
+		const label = this._decisionsRenderDisposables.add(resourceLabels.create(labelContainer, { supportHighlights: false, supportDescriptionHighlights: false }));
+		label.setResource({
+			resource: file.modifiedUri,
+			name: file.fileName,
+			description: file.directory || undefined,
+		}, {
+			fileKind: FileKind.FILE,
+			fileDecorations: undefined,
+			strikethrough: file.changeKind === 'deleted',
+		});
+
+		const badge = dom.append(fileRow, $('.sessions-decisions-file-badge'));
+		switch (file.changeKind) {
+			case 'added':
+				badge.textContent = 'A';
+				badge.classList.add('added');
+				break;
+			case 'deleted':
+				badge.textContent = 'D';
+				badge.classList.add('deleted');
+				break;
+			default:
+				badge.textContent = 'M';
+				badge.classList.add('modified');
+				break;
+		}
+
+		const lineCounts = dom.append(fileRow, $('.sessions-decisions-file-line-counts'));
+		const added = dom.append(lineCounts, $('span.sessions-decisions-file-lines-added'));
+		added.textContent = `+${file.insertions}`;
+		const removed = dom.append(lineCounts, $('span.sessions-decisions-file-lines-removed'));
+		removed.textContent = `-${file.deletions}`;
+
+		fileRow.setAttribute('aria-label', localize(
+			'decisions.file.aria',
+			"{0}, {1}, +{2} -{3}",
+			file.fileName,
+			file.directory || dirname(file.modifiedUri).path,
+			file.insertions,
+			file.deletions,
+		));
+
+		this._decisionsRenderDisposables.add(dom.addDisposableListener(fileRow, dom.EventType.CLICK, () => {
+			this._openDecisionFile(file);
+		}));
+
+		return fileRow;
+	}
+
+	private _renderDecisionStats(parent: HTMLElement, decision: IDecision): void {
+		const stats = dom.append(parent, $('.sessions-decisions-row-stats'));
+		const fileLabel = decision.evidence.length === 1
+			? localize('decisions.subtext.file', "1 file")
+			: localize('decisions.subtext.files', "{0} files", decision.evidence.length);
+		const fileSpan = dom.append(stats, $('span'));
+		fileSpan.textContent = `${fileLabel} · `;
+		const added = dom.append(stats, $('span.sessions-decisions-row-lines-added'));
+		added.textContent = `+${decision.insertions}`;
+		dom.append(stats, $('span')).textContent = ' ';
+		const removed = dom.append(stats, $('span.sessions-decisions-row-lines-removed'));
+		removed.textContent = `-${decision.deletions}`;
+	}
+
+	private async _openDecisionFile(file: IDecisionEvidenceFile): Promise<void> {
+		const options = { pinned: true, preserveFocus: false };
+		try {
+			if (file.changeKind === 'deleted' && file.originalUri) {
+				await this.editorService.openEditor({ resource: file.originalUri, options }, ACTIVE_GROUP);
+				return;
+			}
+			if (file.originalUri) {
+				await this.editorService.openEditor({
+					original: { resource: file.originalUri },
+					modified: { resource: file.modifiedUri },
+					options,
+				}, ACTIVE_GROUP);
+				return;
+			}
+			await this.editorService.openEditor({ resource: file.modifiedUri, options }, ACTIVE_GROUP);
+		} catch {
+			// Swallow open failures — they would already surface via the editor service.
+		}
 	}
 
 	override focus(): void {
@@ -1177,7 +1557,7 @@ class SetChangesListViewModeAction extends ViewAction<ChangesViewPane> {
 			icon: Codicon.listTree,
 			toggled: ChangesContextKeys.ViewMode.isEqualTo(ChangesViewMode.List),
 			menu: {
-				id: MenuId.ChatEditingSessionTitleToolbar,
+				id: MenuId.ChatEditingSessionCodeOverflow,
 				group: '1_viewmode',
 				order: 1
 			}
@@ -1200,7 +1580,7 @@ class SetChangesTreeViewModeAction extends ViewAction<ChangesViewPane> {
 			icon: Codicon.listFlat,
 			toggled: ChangesContextKeys.ViewMode.isEqualTo(ChangesViewMode.Tree),
 			menu: {
-				id: MenuId.ChatEditingSessionTitleToolbar,
+				id: MenuId.ChatEditingSessionCodeOverflow,
 				group: '1_viewmode',
 				order: 2
 			}
@@ -1232,7 +1612,6 @@ class VersionsPickerAction extends Action2 {
 				id: MenuId.ChatEditingSessionChangesFileHeaderToolbar,
 				group: 'navigation',
 				order: 9,
-				when: ActiveSessionContextKeys.HasGitRepository,
 			}],
 		});
 	}
@@ -1241,41 +1620,63 @@ class VersionsPickerAction extends Action2 {
 }
 registerAction2(VersionsPickerAction);
 
-class ChangesPickerActionItem extends ActionWidgetDropdownActionViewItem {
+export class ChangesPickerActionItem extends ActionWidgetDropdownActionViewItem {
+	private _sessionsContextKeyService!: IContextKeyService;
+	private _versionModeAutorun: IDisposable | undefined;
+
 	constructor(
 		action: MenuItemAction,
-		private readonly viewModel: ChangesViewModel,
 		@IActionWidgetService actionWidgetService: IActionWidgetService,
 		@IKeybindingService keybindingService: IKeybindingService,
 		@IContextKeyService contextKeyService: IContextKeyService,
 		@ISessionsManagementService sessionManagementService: ISessionsManagementService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IViewsService private readonly viewsService: IViewsService,
+		@ICommandService commandService: ICommandService,
 	) {
+		// Delegate to the SET_CODE_VIEW_MODE command so the context-key set happens at the
+		// root scope (where the view-registry's `when` evaluator looks). Doing the bindTo
+		// here on the picker's scoped contextKeyService would not propagate to the root.
+		const switchCodeViewMode = async (mode: CodeViewMode) => {
+			await commandService.executeCommand(SET_CODE_VIEW_MODE_COMMAND_ID, mode);
+		};
+
+		const setVersionMode = async (mode: ChangesVersionMode) => {
+			await switchCodeViewMode(CodeViewMode.Changes);
+			const view = await viewsService.openView<ChangesViewPane>(CHANGES_VIEW_ID, false);
+			view?.viewModel.setVersionMode(mode);
+			logChangesViewVersionModeChange(this.telemetryService, mode);
+		};
+
 		const actionProvider: IActionWidgetDropdownActionProvider = {
 			getActions: () => {
-				const state = viewModel.activeSessionStateObs.get();
+				const codeMode = (contextKeyService.getContextKeyValue<string>(ChangesContextKeys.CodeViewMode.key) as CodeViewMode) ?? CodeViewMode.Changes;
+				const inChanges = codeMode === CodeViewMode.Changes;
+				const view = viewsService.getViewWithId<ChangesViewPane>(CHANGES_VIEW_ID);
+				const viewModel = view?.viewModel;
+				const versionMode = viewModel?.versionModeObs.get();
+				const state = viewModel?.activeSessionStateObs.get();
 				const branchName = state?.branchName;
 				const baseBranchName = state?.baseBranchName;
+				const isCloud = viewModel?.activeSessionTypeObs.get() === COPILOT_CLOUD_SESSION_TYPE;
+				const checkpointsAvailable = !viewModel || isCloud ||
+					(viewModel.activeSessionFirstCheckpointRefObs.get() !== undefined &&
+						viewModel.activeSessionLastCheckpointRefObs.get() !== undefined);
 
-				const actions = [
-					{
-						...action,
-						id: 'chatEditing.versionsBranchChanges',
-						label: localize('chatEditing.versionsBranchChanges', 'Branch Changes'),
-						detail: branchName && baseBranchName
-							? `${branchName} → ${baseBranchName}`
-							: branchName,
-						checked: viewModel.versionModeObs.get() === ChangesVersionMode.BranchChanges,
-						category: { label: 'changes', order: 1, showHeader: false },
-						run: async () => {
-							viewModel.setVersionMode(ChangesVersionMode.BranchChanges);
-							logChangesViewVersionModeChange(this.telemetryService, ChangesVersionMode.BranchChanges);
-							if (this.element) {
-								this.renderLabel(this.element);
-							}
-						},
+				const actions: IActionWidgetDropdownAction[] = [];
+
+				actions.push({
+					...action,
+					id: 'chatEditing.versionsBranchChanges',
+					label: localize('chatEditing.versionsBranchChanges', 'Branch Changes'),
+					detail: branchName && baseBranchName ? `${branchName} -> ${baseBranchName}` : branchName,
+					checked: inChanges && versionMode === ChangesVersionMode.BranchChanges,
+					category: { label: 'changes', order: 1, showHeader: false },
+					run: async () => {
+						await setVersionMode(ChangesVersionMode.BranchChanges);
+						if (this.element) { this.renderLabel(this.element); }
 					},
-				];
+				});
 
 				if (!isWeb) {
 					actions.push({
@@ -1283,15 +1684,12 @@ class ChangesPickerActionItem extends ActionWidgetDropdownActionViewItem {
 						id: 'chatEditing.versionsUncommittedChanges',
 						label: localize('chatEditing.versionsUncommittedChanges', 'Uncommitted Changes'),
 						detail: localize('chatEditing.versionsUncommittedChanges.description', 'Show uncommitted changes in this session'),
-						checked: viewModel.versionModeObs.get() === ChangesVersionMode.UncommittedChanges,
+						checked: inChanges && versionMode === ChangesVersionMode.UncommittedChanges,
 						category: { label: 'changes', order: 2, showHeader: false },
-						enabled: viewModel.activeSessionTypeObs.get() !== COPILOT_CLOUD_SESSION_TYPE,
+						enabled: !isCloud,
 						run: async () => {
-							viewModel.setVersionMode(ChangesVersionMode.UncommittedChanges);
-							logChangesViewVersionModeChange(this.telemetryService, ChangesVersionMode.UncommittedChanges);
-							if (this.element) {
-								this.renderLabel(this.element);
-							}
+							await setVersionMode(ChangesVersionMode.UncommittedChanges);
+							if (this.element) { this.renderLabel(this.element); }
 						},
 					});
 					actions.push({
@@ -1299,17 +1697,12 @@ class ChangesPickerActionItem extends ActionWidgetDropdownActionViewItem {
 						id: 'chatEditing.versionsAllChanges',
 						label: localize('chatEditing.versionsAllChanges', 'All Changes'),
 						detail: localize('chatEditing.versionsAllChanges.description', 'Show all changes made in this session'),
-						checked: viewModel.versionModeObs.get() === ChangesVersionMode.AllChanges,
+						checked: inChanges && versionMode === ChangesVersionMode.AllChanges,
 						category: { label: 'checkpoints', order: 3, showHeader: false },
-						enabled: viewModel.activeSessionTypeObs.get() === COPILOT_CLOUD_SESSION_TYPE ||
-							(viewModel.activeSessionFirstCheckpointRefObs.get() !== undefined &&
-								viewModel.activeSessionLastCheckpointRefObs.get() !== undefined),
+						enabled: checkpointsAvailable,
 						run: async () => {
-							viewModel.setVersionMode(ChangesVersionMode.AllChanges);
-							logChangesViewVersionModeChange(this.telemetryService, ChangesVersionMode.AllChanges);
-							if (this.element) {
-								this.renderLabel(this.element);
-							}
+							await setVersionMode(ChangesVersionMode.AllChanges);
+							if (this.element) { this.renderLabel(this.element); }
 						},
 					});
 					actions.push({
@@ -1317,45 +1710,102 @@ class ChangesPickerActionItem extends ActionWidgetDropdownActionViewItem {
 						id: 'chatEditing.versionsLastTurnChanges',
 						label: localize('chatEditing.versionsLastTurnChanges', "Last Turn's Changes"),
 						detail: localize('chatEditing.versionsLastTurnChanges.description', 'Show only changes from the last turn'),
-						checked: viewModel.versionModeObs.get() === ChangesVersionMode.LastTurn,
+						checked: inChanges && versionMode === ChangesVersionMode.LastTurn,
 						category: { label: 'checkpoints', order: 4, showHeader: false },
-						enabled: viewModel.activeSessionTypeObs.get() === COPILOT_CLOUD_SESSION_TYPE ||
-							(viewModel.activeSessionFirstCheckpointRefObs.get() !== undefined &&
-								viewModel.activeSessionLastCheckpointRefObs.get() !== undefined),
+						enabled: checkpointsAvailable,
 						run: async () => {
-							viewModel.setVersionMode(ChangesVersionMode.LastTurn);
-							logChangesViewVersionModeChange(this.telemetryService, ChangesVersionMode.LastTurn);
-							if (this.element) {
-								this.renderLabel(this.element);
-							}
+							await setVersionMode(ChangesVersionMode.LastTurn);
+							if (this.element) { this.renderLabel(this.element); }
 						},
 					});
 				}
+
+				actions.push({
+					...action,
+					id: 'chatEditing.codeView.allFiles',
+					label: localize('chatEditing.codeView.allFiles', "All Files"),
+					detail: localize('chatEditing.codeView.allFiles.description', "Browse all files in the session workspace"),
+					checked: codeMode === CodeViewMode.AllFiles,
+					category: { label: 'browse', order: 5, showHeader: false },
+					run: async () => {
+						await switchCodeViewMode(CodeViewMode.AllFiles);
+						if (this.element) { this.renderLabel(this.element); }
+					},
+				});
+
+				actions.push({
+					...action,
+					id: 'chatEditing.codeView.decisions',
+					label: localize('chatEditing.codeView.decisions', "Decisions"),
+					detail: localize('chatEditing.codeView.decisions.description', "Review decisions and rationale from this session"),
+					checked: codeMode === CodeViewMode.Decisions,
+					category: { label: 'browse', order: 6, showHeader: false },
+					run: async () => {
+						await switchCodeViewMode(CodeViewMode.Decisions);
+						if (this.element) { this.renderLabel(this.element); }
+					},
+				});
 
 				return actions;
 			},
 		};
 
 		super(action, { actionProvider, listOptions: {} }, actionWidgetService, keybindingService, contextKeyService, telemetryService);
+		this._sessionsContextKeyService = contextKeyService;
 
-		this._register(autorun(reader => {
-			viewModel.versionModeObs.read(reader);
+		// Subscribe to versionMode changes from the Changes view (lazy, since the view may
+		// not be instantiated yet when this picker is created in the Files/Decisions views).
+		const trySubscribeViewModel = () => {
+			if (this._versionModeAutorun) {
+				return true;
+			}
+			const v = viewsService.getViewWithId<ChangesViewPane>(CHANGES_VIEW_ID);
+			if (!v) {
+				return false;
+			}
+			this._versionModeAutorun = this._register(autorun(reader => {
+				v.viewModel.versionModeObs.read(reader);
+				if (this.element) { this.renderLabel(this.element); }
+			}));
+			return true;
+		};
+		if (!trySubscribeViewModel()) {
+			const sub = viewsService.onDidChangeViewVisibility(() => {
+				if (trySubscribeViewModel()) {
+					sub.dispose();
+				}
+			});
+			this._register(sub);
+		}
 
-			if (this.element) {
-				this.renderLabel(this.element);
+		const codeViewModeKeyName = ChangesContextKeys.CodeViewMode.key;
+		this._register(contextKeyService.onDidChangeContext(e => {
+			if (e.affectsSome(new Set([codeViewModeKeyName]))) {
+				if (this.element) {
+					this.renderLabel(this.element);
+				}
 			}
 		}));
 	}
 
 	protected override renderLabel(element: HTMLElement): IDisposable | null {
-		const mode = this.viewModel.versionModeObs.get();
-		const label = mode === ChangesVersionMode.BranchChanges
-			? localize('sessionsChanges.versionsBranchChanges', "Branch Changes")
-			: mode === ChangesVersionMode.UncommittedChanges
+		const codeMode = (this._sessionsContextKeyService.getContextKeyValue<string>(ChangesContextKeys.CodeViewMode.key) as CodeViewMode) ?? CodeViewMode.Changes;
+		let label: string;
+		if (codeMode === CodeViewMode.AllFiles) {
+			label = localize('sessionsCode.allFiles', "All Files");
+		} else if (codeMode === CodeViewMode.Decisions) {
+			label = localize('sessionsCode.decisions', "Decisions");
+		} else {
+			const view = this.viewsService.getViewWithId<ChangesViewPane>(CHANGES_VIEW_ID);
+			const mode = view?.viewModel.versionModeObs.get();
+			label = mode === ChangesVersionMode.UncommittedChanges
 				? localize('sessionsChanges.versionsUncommittedChanges', 'Uncommitted Changes')
 				: mode === ChangesVersionMode.AllChanges
 					? localize('sessionsChanges.versionsAllChanges', "All Changes")
-					: localize('sessionsChanges.versionsLastTurn', "Last Turn's Changes");
+					: mode === ChangesVersionMode.LastTurn
+						? localize('sessionsChanges.versionsLastTurn', "Last Turn's Changes")
+						: localize('sessionsChanges.versionsBranchChanges', "Branch Changes");
+		}
 
 		dom.reset(element, dom.$('span', undefined, label), ...renderLabelWithIcons('$(chevron-down)'));
 		this.updateAriaLabel();

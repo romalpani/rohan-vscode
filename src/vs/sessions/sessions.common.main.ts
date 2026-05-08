@@ -430,6 +430,7 @@ import './browser/paneCompositePartService.js';
 import './browser/parts/editorParts.js';
 import './browser/parts/menubar.contribution.js';
 import './browser/layoutActions.js';
+import './browser/expandArtifactsAction.js';
 
 import './contrib/accountMenu/browser/account.contribution.js';
 import './contrib/aiCustomizationTreeView/browser/aiCustomizationTreeView.contribution.js';

@@ -497,6 +497,12 @@ const apiMenus: IAPIMenu[] = [
 		proposed: 'chatSessionsProvider'
 	},
 	{
+		key: 'chat/input/editing/codeOverflow',
+		id: MenuId.ChatEditingSessionCodeOverflow,
+		description: localize('menus.chatEditingSessionCodeOverflow', "The overflow menu in the Code tab toolbar of the Chat Editing session."),
+		proposed: 'chatSessionsProvider'
+	},
+	{
 		key: 'chat/input/editing/sessionChangeToolbar',
 		id: MenuId.ChatEditingSessionChangeToolbar,
 		description: localize('menus.chatEditingSessionChangeToolbar', "The Chat Editing widget toolbar menu for session changes."),

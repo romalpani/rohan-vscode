@@ -11,6 +11,29 @@
 	box-sizing: border-box;
 }
 
+/* Embedded explorer pane (All Files mode) needs explicit sizing since it lives outside a `.monaco-pane-view` here. */
+.changes-view-body .changes-mode-section > .pane {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+.changes-view-body .changes-mode-section > .pane > .pane-body {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* Code-tab swappable body sections — exactly one is visible based on CodeViewMode. */
+.changes-view-body .changes-mode-section {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
 /* SplitView container */
 .changes-view-body .changes-splitview-container {
 	flex: 1;
@@ -55,19 +78,29 @@
 	overflow: hidden;
 }
 
-/* Files header */
+/* Files header — single inline row hosting picker, action buttons, and overflow */
 .changes-view-body .changes-files-header {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	padding: 2px 0;
-	min-height: 22px;
+	padding: 4px 0;
+	min-height: 26px;
 	font-weight: 500;
 	font-size: 12px;
 }
 
 .changes-view-body .changes-files-header-toolbar {
-	flex: 1;
+	flex: 0 0 auto;
+}
+
+.changes-view-body .chat-editing-session-actions.inline {
+	flex: 1 1 auto;
+	justify-content: flex-end;
+	min-width: 0;
+}
+
+.changes-view-body .changes-files-header-overflow {
+	flex: 0 0 auto;
 }
 
 .changes-view-body .changes-files-header-toolbar .action-label {
@@ -140,56 +173,52 @@
 	align-items: center;
 }
 
-/* Actions container outside the card - new layout experiment */
-.changes-view-body .chat-editing-session-actions.outside-card {
-	margin-bottom: 8px;
+/* Inline actions container (next to picker) */
+.changes-view-body .chat-editing-session-actions.inline {
 	justify-content: flex-end;
 }
 
 /* Larger action buttons matching SCM ActionButton style */
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button {
 	height: 26px;
-	padding: 4px;
+	padding: 4px 10px;
 	font-size: 12px;
 	line-height: 18px;
 }
 
-/* Primary button grows to fill available space */
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button:not(.secondary) {
-	flex: 1;
+/* Primary button — natural width inline (do not stretch) */
+.changes-view-body .chat-editing-session-actions.inline .monaco-button:not(.secondary) {
 	min-width: 0;
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button:not(.secondary) > span:not(.codicon) {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button:not(.secondary) > span:not(.codicon) {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-/* ButtonWithDropdown container grows to fill available space */
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button-dropdown {
-	flex: 1;
+/* ButtonWithDropdown container — natural width inline */
+.changes-view-body .chat-editing-session-actions.inline .monaco-button-dropdown {
 	min-width: 0;
 	display: flex;
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button-dropdown > .monaco-button {
-	flex: 1;
+.changes-view-body .chat-editing-session-actions.inline .monaco-button-dropdown > .monaco-button {
 	min-width: 0;
 	box-sizing: border-box;
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button-dropdown > .monaco-button > span:not(.codicon) {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button-dropdown > .monaco-button > span:not(.codicon) {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button-dropdown > .monaco-button-dropdown-separator {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button-dropdown > .monaco-button-dropdown-separator {
 	flex: 0;
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button-dropdown > .monaco-button.monaco-dropdown-button {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button-dropdown > .monaco-button.monaco-dropdown-button {
 	flex: 0 0 auto;
 	padding: 4px;
 	width: auto;
@@ -197,7 +226,7 @@
 	border-radius: 0px 4px 4px 0px;
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button.secondary.monaco-text-button.codicon {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button.secondary.monaco-text-button.codicon {
 	padding: 4px 6px;
 	font-size: 16px !important;
 }
@@ -220,7 +249,7 @@
 	color: var(--vscode-button-secondaryForeground);
 }
 
-.changes-view-body .chat-editing-session-actions.outside-card .monaco-button-dropdown > .monaco-button.secondary.monaco-text-button {
+.changes-view-body .chat-editing-session-actions.inline .monaco-button-dropdown > .monaco-button.secondary.monaco-text-button {
 	border-radius: 4px 0px 0px 4px;
 }
 

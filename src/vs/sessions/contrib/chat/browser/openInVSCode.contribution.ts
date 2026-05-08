@@ -8,18 +8,16 @@ import { Schemas } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { localize2 } from '../../../../nls.js';
-import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { AGENT_HOST_SCHEME, fromAgentHostUri } from '../../../../platform/agentHost/common/agentHostUri.js';
 import { IRemoteAgentHostService } from '../../../../platform/agentHost/common/remoteAgentHostService.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { ActiveAuxiliaryContext, IsAuxiliaryWindowContext } from '../../../../workbench/common/contextkeys.js';
+import { IsAuxiliaryWindowContext, IsSessionsWindowContext } from '../../../../workbench/common/contextkeys.js';
 import { IsPhoneLayoutContext, SessionsWelcomeVisibleContext } from '../../../common/contextkeys.js';
 import { logSessionsInteraction } from '../../../common/sessionsTelemetry.js';
-import { Menus } from '../../../browser/menus.js';
-import { CHANGES_VIEW_CONTAINER_ID } from '../../changes/common/changes.js';
 import { isWorkspaceAgentSessionType } from '../../../services/sessions/common/session.js';
 import { ISessionsManagementService } from '../../../services/sessions/common/sessionsManagement.js';
 import { ISessionsProvidersService } from '../../../services/sessions/browser/sessionsProvidersService.js';
@@ -40,14 +38,17 @@ registerAction2(class OpenSessionWorktreeInVSCodeAction extends Action2 {
 			icon: Codicon.vscodeInsiders,
 			precondition: ContextKeyExpr.and(IsAuxiliaryWindowContext.toNegated(), SessionsWelcomeVisibleContext.toNegated()),
 			menu: [{
-				id: Menus.AuxiliaryBarTitle,
+				// Renders inside the Code view's action button bar (next to Run Code Review,
+				// Merge / Mark as done, etc.). Falls back to the default icon-only rendering
+				// because no buttonConfigProvider entry matches this action id.
+				id: MenuId.ChatEditingSessionChangesToolbar,
 				group: 'navigation',
-				order: 2,
+				order: 1,
 				when: ContextKeyExpr.and(
 					IsAuxiliaryWindowContext.toNegated(),
+					IsSessionsWindowContext,
 					SessionsWelcomeVisibleContext.toNegated(),
 					IsPhoneLayoutContext.negate(),
-					ActiveAuxiliaryContext.isEqualTo(CHANGES_VIEW_CONTAINER_ID),
 				),
 			}]
 		});

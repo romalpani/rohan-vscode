@@ -23,7 +23,8 @@ export const enum ChangesVersionMode {
 
 export const enum CodeViewMode {
 	Changes = 'changes',
-	AllFiles = 'allFiles'
+	AllFiles = 'allFiles',
+	Decisions = 'decisions'
 }
 
 export const enum IsolationMode {

@@ -38,6 +38,15 @@ export class SessionsExplorerView extends ExplorerView {
 			}
 		};
 	}
+
+	// Skip the inherited `renderHeader` — when embedded inside the Code view pane
+	// we hide the header (`headerVisible = false`) and the default implementation
+	// looks up this view's container in the views registry, which we don't register.
+	protected override renderHeader(_container: HTMLElement): void { }
+
+	protected override renderBody(container: HTMLElement): void {
+		super.renderBody(container);
+	}
 }
 
 export class SessionsExplorerEmptyView extends ViewPane {
