@@ -10,6 +10,7 @@ import { Action2, registerAction2 } from '../../platform/actions/common/actions.
 import { IContextKey, IContextKeyService, RawContextKey } from '../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../platform/instantiation/common/instantiation.js';
 import { registerIcon } from '../../platform/theme/common/iconRegistry.js';
+import { ITelemetryService } from '../../platform/telemetry/common/telemetry.js';
 import { IWorkbenchLayoutService, Parts } from '../../workbench/services/layout/browser/layoutService.js';
 import { readContextKey } from '../services/contextKey/common/scopedContextKey.js';
 import { Menus } from './menus.js';
@@ -33,7 +34,7 @@ interface ISavedLayout {
 // We restore the same parts to their prior visibility on collapse.
 const savedLayouts = new WeakMap<IWorkbenchLayoutService, ISavedLayout>();
 
-class ToggleArtifactsExpandedAction extends Action2 {
+export class ToggleArtifactsExpandedAction extends Action2 {
 
 	static readonly ID = 'workbench.action.agentToggleArtifactsExpanded';
 
@@ -62,6 +63,7 @@ class ToggleArtifactsExpandedAction extends Action2 {
 	run(accessor: ServicesAccessor): void {
 		const layoutService = accessor.get(IWorkbenchLayoutService);
 		const contextKeyService = accessor.get(IContextKeyService);
+		const telemetryService = accessor.get(ITelemetryService);
 
 		// Read the current value before bindTo (which would reset to default — see readContextKey docs).
 		const isExpanded = readContextKey(contextKeyService, ArtifactsExpandedContext) === true;
@@ -94,6 +96,16 @@ class ToggleArtifactsExpandedAction extends Action2 {
 			expandedKey.set(true);
 			alert(localize('artifactsExpanded', "Artifacts expanded"));
 		}
+
+		type ArtifactsExpandedEvent = { expanded: boolean };
+		type ArtifactsExpandedClassification = {
+			expanded: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'True when expanded, false when collapsed.' };
+			owner: 'romalpani';
+			comment: 'Tracks usage of the expand-artifacts toggle in the Agents window.';
+		};
+		telemetryService.publicLog2<ArtifactsExpandedEvent, ArtifactsExpandedClassification>('sessions.artifacts.expanded', {
+			expanded: !isExpanded,
+		});
 	}
 }
 

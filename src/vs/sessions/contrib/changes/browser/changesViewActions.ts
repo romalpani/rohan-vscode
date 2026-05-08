@@ -5,7 +5,7 @@
 
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { localize2 } from '../../../../nls.js';
+import { localize, localize2 } from '../../../../nls.js';
 import { Action2, IAction2Options, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../../workbench/common/contributions.js';
@@ -22,6 +22,8 @@ import { ChangesViewPane } from './changesView.js';
 import { URI } from '../../../../base/common/uri.js';
 import { isEqual } from '../../../../base/common/resources.js';
 import { IEditorService } from '../../../../workbench/services/editor/common/editorService.js';
+import { status } from '../../../../base/browser/ui/aria/aria.js';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 
 const openChangesViewActionOptions: IAction2Options = {
 	id: 'workbench.action.agentSessions.openChangesView',
@@ -224,10 +226,30 @@ registerAction2(class SetCodeViewModeAction extends Action2 {
 		}
 		const contextKeyService = accessor.get(IContextKeyService);
 		const viewsService = accessor.get(IViewsService);
+		const telemetryService = accessor.get(ITelemetryService);
 
 		const current = readContextKey(contextKeyService, ChangesContextKeys.CodeViewMode);
 		if (current !== mode) {
 			ChangesContextKeys.CodeViewMode.bindTo(contextKeyService).set(mode);
+
+			type CodeModeSwitchEvent = { from: CodeViewMode; to: CodeViewMode };
+			type CodeModeSwitchClassification = {
+				from: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'Previous code view mode.' };
+				to: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'New code view mode.' };
+				owner: 'romalpani';
+				comment: 'Tracks how often users switch between Code tab modes.';
+			};
+			telemetryService.publicLog2<CodeModeSwitchEvent, CodeModeSwitchClassification>('sessions.codeTab.modeSwitched', {
+				from: current ?? CodeViewMode.Changes,
+				to: mode,
+			});
+
+			const modeLabel = mode === CodeViewMode.Changes
+				? localize('codeViewMode.changes', "Changes")
+				: mode === CodeViewMode.AllFiles
+					? localize('codeViewMode.allFiles', "All Files")
+					: localize('codeViewMode.decisions', "Decisions");
+			status(localize('codeTab.modeSwitched', "Switched to {0}", modeLabel));
 		}
 		// Open the container so the now-visible view becomes active.
 		await viewsService.openViewContainer(CHANGES_VIEW_CONTAINER_ID, false);

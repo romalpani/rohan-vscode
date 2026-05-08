@@ -17,6 +17,8 @@ import { IsPhoneLayoutContext } from '../../../common/contextkeys.js';
 import './changesViewActions.js';
 import './checksActions.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
+import { AccessibleViewRegistry } from '../../../../platform/accessibility/browser/accessibleViewRegistry.js';
+import { CodeTabAccessibilityHelp } from './codeTabAccessibilityHelp.js';
 
 const codeViewIcon = registerIcon('code-view-icon', Codicon.code, localize2('codeViewIcon', 'View icon for the Code view.').value);
 
@@ -60,3 +62,5 @@ viewsRegistry.registerViews([{
 }], changesViewContainer);
 
 registerWorkbenchContribution2(ChangesTitleBarContribution.ID, ChangesTitleBarContribution, WorkbenchPhase.AfterRestored);
+
+AccessibleViewRegistry.register(new CodeTabAccessibilityHelp());
