@@ -913,7 +913,7 @@ export class ChangesViewPane extends ViewPane {
 		this._filesView?.collapseAll();
 	}
 
-	/** Lazily mount a `SessionsExplorerView` inside `filesBodySection`. */
+	/** Show the AllFiles section: either the file explorer, or an empty welcome state. */
 	private _initFilesSection(): void {
 		if (!this.filesBodySection) {
 			return;
@@ -932,25 +932,31 @@ export class ChangesViewPane extends ViewPane {
 		}
 
 		const hasFolders = this.workspaceContextService.getWorkspace().folders.length > 0;
-
-		if (!hasFolders) {
-			// Inline empty welcome state when no workspace folders.
-			if (this._filesView) {
-				this._filesView.element.style.display = 'none';
-			}
-			if (!this._filesEmptyState) {
-				this._filesEmptyState = dom.append(this.filesBodySection, $('.files-empty-view-body'));
-				const welcomeContainer = dom.append(this._filesEmptyState, $('.files-empty-welcome'));
-				const welcomeIcon = dom.append(welcomeContainer, $('.files-empty-welcome-icon'));
-				welcomeIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.files));
-				const welcomeMessage = dom.append(welcomeContainer, $('.files-empty-welcome-message'));
-				welcomeMessage.textContent = localize('filesView.noFiles', "Folders and files will appear here.");
-			}
-			this._filesEmptyState.style.display = '';
-			return;
+		if (hasFolders) {
+			this._showAllFilesExplorer(this.filesBodySection);
+		} else {
+			this._showAllFilesWelcome(this.filesBodySection);
 		}
+	}
 
-		// Workspace has folders — show (or create) the explorer.
+	/** Show the inline welcome message used when the workspace has no folders. */
+	private _showAllFilesWelcome(parent: HTMLElement): void {
+		if (this._filesView) {
+			this._filesView.element.style.display = 'none';
+		}
+		if (!this._filesEmptyState) {
+			this._filesEmptyState = dom.append(parent, $('.files-empty-view-body'));
+			const welcomeContainer = dom.append(this._filesEmptyState, $('.files-empty-welcome'));
+			const welcomeIcon = dom.append(welcomeContainer, $('.files-empty-welcome-icon'));
+			welcomeIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.files));
+			const welcomeMessage = dom.append(welcomeContainer, $('.files-empty-welcome-message'));
+			welcomeMessage.textContent = localize('filesView.noFiles', "Folders and files will appear here.");
+		}
+		this._filesEmptyState.style.display = '';
+	}
+
+	/** Show the embedded file explorer; lazily mount the first time. */
+	private _showAllFilesExplorer(parent: HTMLElement): void {
 		if (this._filesEmptyState) {
 			this._filesEmptyState.style.display = 'none';
 		}
@@ -970,7 +976,7 @@ export class ChangesViewPane extends ViewPane {
 		this._filesView = this._register(this.scopedInstantiationService.createInstance(SessionsExplorerView, filesViewOptions));
 		this._filesView.render();
 		this._filesView.headerVisible = false;
-		this.filesBodySection.appendChild(this._filesView.element);
+		parent.appendChild(this._filesView.element);
 
 		// Layout BEFORE setVisible so the tree has a non-zero size when `setTreeInput()`
 		// is fired by the body-visibility change. Otherwise the async setInput resolves
