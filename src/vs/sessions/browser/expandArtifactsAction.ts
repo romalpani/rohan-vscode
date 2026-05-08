@@ -7,7 +7,7 @@ import { alert } from '../../base/browser/ui/aria/aria.js';
 import { Codicon } from '../../base/common/codicons.js';
 import { localize, localize2 } from '../../nls.js';
 import { Action2, registerAction2 } from '../../platform/actions/common/actions.js';
-import { ContextKeyExpr, IContextKey, IContextKeyService, RawContextKey } from '../../platform/contextkey/common/contextkey.js';
+import { IContextKey, IContextKeyService, RawContextKey } from '../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../platform/instantiation/common/instantiation.js';
 import { registerIcon } from '../../platform/theme/common/iconRegistry.js';
 import { IWorkbenchLayoutService, Parts } from '../../workbench/services/layout/browser/layoutService.js';
@@ -96,25 +96,4 @@ class ToggleArtifactsExpandedAction extends Action2 {
 	}
 }
 
-// When the auxiliary bar is hidden by the user while expanded, drop the expanded state
-// so a subsequent show doesn't leave the user in a half-collapsed state. Cheap to register
-// once globally — the contribution is initialized on workbench start.
-class ArtifactsExpandedStateContribution {
-	static readonly ID = 'workbench.contrib.artifactsExpandedState';
-
-	constructor(
-		@IWorkbenchLayoutService _layoutService: IWorkbenchLayoutService,
-		@IContextKeyService _contextKeyService: IContextKeyService,
-	) {
-		// Reserved for future cleanup logic; right now state lives in WeakMap + context key,
-		// both of which are window-scoped, so no explicit cleanup is needed.
-	}
-}
-
 registerAction2(ToggleArtifactsExpandedAction);
-
-// Re-export the context-key expression for any callers that need to gate UI on expanded state.
-export const ArtifactsExpandedExpr = ContextKeyExpr.equals(ArtifactsExpandedContext.key, true);
-
-// Suppress unused-class warning while keeping a hook for later wiring.
-void ArtifactsExpandedStateContribution;
