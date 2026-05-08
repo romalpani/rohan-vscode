@@ -259,9 +259,9 @@ export class ChangesViewPane extends ViewPane {
 	private filesBodySection: HTMLElement | undefined;
 	private decisionsBodySection: HTMLElement | undefined;
 
-	// Last known body dimensions, updated in layoutBody(). Used to layout embedded views.
-	private _bodyHeight: number = 0;
-	private _bodyWidth: number = 0;
+	// Last known body dimensions from layoutBody(); used when laying out lazily-mounted
+	// embedded views before the next layoutBody() pass arrives.
+	private _lastBodyDimensions: { height: number; width: number } | undefined;
 
 	// Lazily-initialized All Files explorer.
 	private _filesView: SessionsExplorerView | undefined;
@@ -867,8 +867,7 @@ export class ChangesViewPane extends ViewPane {
 	protected override layoutBody(height: number, width: number): void {
 		super.layoutBody(height, width);
 		this.currentBodyWidth = width;
-		this._bodyHeight = height;
-		this._bodyWidth = width;
+		this._lastBodyDimensions = { height, width };
 		this.layoutSplitView();
 		this._layoutFilesView();
 	}
@@ -986,14 +985,15 @@ export class ChangesViewPane extends ViewPane {
 		if (!this._filesView || !this.filesBodySection || this.filesBodySection.style.display === 'none') {
 			return;
 		}
-		// Prefer DOM measurements; fall back to last known body dimensions from layoutBody().
-		const height = this.filesBodySection.clientHeight || this._bodyHeight;
-		const width = this.filesBodySection.clientWidth || this._bodyWidth;
-		if (height <= 0 || width <= 0) {
+		// Use the last known body dimensions from layoutBody(). Reading from the DOM at
+		// this point can return 0 — our parent flex container may not have committed
+		// layout yet when we lazily mount during a `display:''` transition.
+		const dims = this._lastBodyDimensions;
+		if (!dims || dims.height <= 0 || dims.width <= 0) {
 			return;
 		}
-		this._filesView.orthogonalSize = width;
-		this._filesView.layout(height);
+		this._filesView.orthogonalSize = dims.width;
+		this._filesView.layout(dims.height);
 	}
 
 	/**
