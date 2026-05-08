@@ -17,6 +17,7 @@ import { ActiveSessionContextKeys, CHANGES_VIEW_CONTAINER_ID, CHANGES_VIEW_ID, C
 import { IsSessionsWindowContext } from '../../../../workbench/common/contextkeys.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { ChatContextKeys } from '../../../../workbench/contrib/chat/common/actions/chatContextKeys.js';
+import { readContextKey } from '../../../services/contextKey/common/scopedContextKey.js';
 import { ChangesViewPane } from './changesView.js';
 import { URI } from '../../../../base/common/uri.js';
 import { isEqual } from '../../../../base/common/resources.js';
@@ -224,7 +225,7 @@ registerAction2(class SetCodeViewModeAction extends Action2 {
 		const contextKeyService = accessor.get(IContextKeyService);
 		const viewsService = accessor.get(IViewsService);
 
-		const current = contextKeyService.getContextKeyValue<string>(ChangesContextKeys.CodeViewMode.key);
+		const current = readContextKey(contextKeyService, ChangesContextKeys.CodeViewMode);
 		if (current !== mode) {
 			ChangesContextKeys.CodeViewMode.bindTo(contextKeyService).set(mode);
 		}

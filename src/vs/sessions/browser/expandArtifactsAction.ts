@@ -11,6 +11,7 @@ import { IContextKey, IContextKeyService, RawContextKey } from '../../platform/c
 import { ServicesAccessor } from '../../platform/instantiation/common/instantiation.js';
 import { registerIcon } from '../../platform/theme/common/iconRegistry.js';
 import { IWorkbenchLayoutService, Parts } from '../../workbench/services/layout/browser/layoutService.js';
+import { readContextKey } from '../services/contextKey/common/scopedContextKey.js';
 import { Menus } from './menus.js';
 
 // Context key tracking whether the artifacts (auxiliary bar) area is currently expanded
@@ -62,8 +63,8 @@ class ToggleArtifactsExpandedAction extends Action2 {
 		const layoutService = accessor.get(IWorkbenchLayoutService);
 		const contextKeyService = accessor.get(IContextKeyService);
 
-		// Read the current value BEFORE bindTo, which resets the key to its default.
-		const isExpanded = contextKeyService.getContextKeyValue<boolean>(ArtifactsExpandedContext.key) === true;
+		// Read the current value before bindTo (which would reset to default — see readContextKey docs).
+		const isExpanded = readContextKey(contextKeyService, ArtifactsExpandedContext) === true;
 		const expandedKey: IContextKey<boolean> = ArtifactsExpandedContext.bindTo(contextKeyService);
 
 		if (isExpanded) {
