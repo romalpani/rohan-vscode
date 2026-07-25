@@ -79,6 +79,7 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 		private readonly _workbenchUIElementFactory: IWorkbenchUIElementFactory,
 		private readonly _renderSideBySide: IObservable<boolean | undefined>,
 		private readonly _diffEditorOptions: IDiffEditorOptions | undefined,
+		private readonly _paddingBottomPx: IObservable<number>,
 		@IContextKeyService private readonly _parentContextKeyService: IContextKeyService,
 		@IInstantiationService private readonly _parentInstantiationService: IInstantiationService,
 	) {
@@ -153,7 +154,7 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 		);
 		this._viewItems = this._viewItemsInfo.map(this, items => items.items);
 		this._spaceBetweenPx = 0;
-		this._totalHeight = this._viewItems.map(this, (items, reader) => items.reduce((r, i) => r + i.contentHeight.read(reader) + this._spaceBetweenPx, 0));
+		this._totalHeight = this._viewItems.map(this, (items, reader) => items.reduce((r, i) => r + i.contentHeight.read(reader) + this._spaceBetweenPx, 0) + this._paddingBottomPx.read(reader));
 		this.activeControl = derived(this, reader => {
 			const activeDiffItem = this._viewModel.read(reader)?.activeDiffItem.read(reader);
 			if (!activeDiffItem) { return undefined; }

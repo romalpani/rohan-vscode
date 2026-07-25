@@ -7,39 +7,41 @@
  * used by the Changes view / editor). Kept out of the shared workbench style so
  * these overrides live next to the Changes contribution that owns them. */
 
-/* The per-file diff rows intentionally render flush with the panel (the old
- * `padding: 0 8px` inset was removed as part of the spacing rework); only
- * `box-sizing` is kept here. */
+/* Keep each diff card inset from the panel walls. */
 .agent-sessions-workbench .part.editor .multiDiffEntry {
 	box-sizing: border-box;
+	padding: 0 var(--vscode-spacing-size80);
 }
 
 .agent-sessions-workbench .part.editor .multiDiffEntry .header {
 	cursor: pointer;
-	background: transparent;
+	background: var(--vscode-multiDiffEditor-background);
 	position: relative;
 }
 
-.agent-sessions-workbench .part.editor .multiDiffEntry .header::before {
-	content: '';
-	position: absolute;
-	inset: 0;
-	background: var(--vscode-agentsPanel-background);
-	z-index: -1;
-	pointer-events: none;
-}
-
+/* The header and editor borders form one continuous card. */
 .agent-sessions-workbench .part.editor .multiDiffEntry .header-content {
-	border-radius: var(--vscode-cornerRadius-medium);
-	border: none;
+	border-top-left-radius: var(--vscode-cornerRadius-medium);
+	border-top-right-radius: var(--vscode-cornerRadius-medium);
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+	border: var(--vscode-strokeThickness) solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+	border-bottom: none;
 	background: var(--vscode-sideBarSectionHeader-background);
-	margin: 0;
+	margin: var(--vscode-spacing-size80) 0 0 0;
 	padding-left: var(--vscode-spacing-sizeNone);
 	align-items: center;
 }
 
-.agent-sessions-workbench .part.editor .multiDiffEntry .header:not(.collapsed) .header-content {
-	border-bottom: none;
+/* A collapsed header is the whole card. */
+.agent-sessions-workbench .part.editor .multiDiffEntry .header[aria-expanded="false"] .header-content {
+	border-bottom: var(--vscode-strokeThickness) solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+	border-bottom-left-radius: var(--vscode-cornerRadius-medium);
+	border-bottom-right-radius: var(--vscode-cornerRadius-medium);
+}
+
+.agent-sessions-workbench .part.editor .multiDiffEntry .header[aria-expanded="false"] + .editorParent {
+	border: none;
 }
 
 .agent-sessions-workbench .part.editor .multiDiffEntry .header-content .file-path .title {
@@ -85,17 +87,58 @@
 	outline: none;
 }
 
-.agent-sessions-workbench .part.editor .multiDiffEntry .header:focus .header-content,
-.agent-sessions-workbench .part.editor .multiDiffEntry .header:focus-visible .header-content {
-	box-shadow: inset 0 0 0 1px var(--vscode-focusBorder);
+/* Keep secondary actions quiet until the card is hovered or focused. */
+.agent-sessions-workbench .part.editor .multiDiffEntry .header-content .actions-container .action-item:not(.changeset-review-action) {
+	visibility: hidden;
 }
 
+.agent-sessions-workbench .part.editor .multiDiffEntry:hover .header-content .actions-container .action-item:not(.changeset-review-action),
+.agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .header-content .actions-container .action-item:not(.changeset-review-action) {
+	visibility: visible;
+}
+
+/* Match the collapse chevron's target and states to the file toolbar actions. */
 .agent-sessions-workbench .part.editor .multiDiffEntry .collapse-button a {
-	border-radius: var(--vscode-cornerRadius-small);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 3px;
+	border-radius: var(--vscode-cornerRadius-medium);
 }
 
+.agent-sessions-workbench .part.editor .multiDiffEntry .collapse-button a:hover,
+.agent-sessions-workbench .part.editor .multiDiffEntry .collapse-button a:focus {
+	background: var(--vscode-toolbar-hoverBackground);
+}
+
+.agent-sessions-workbench .part.editor .multiDiffEntry .collapse-button a:focus:not(:focus-visible) {
+	outline: none;
+}
+
+/* The editor completes the card and clips content to its rounded corners. */
 .agent-sessions-workbench .part.editor .multiDiffEntry .editorParent {
-	border-bottom: none;
+	border: var(--vscode-strokeThickness) solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));
+	border-top: none;
+	border-bottom-left-radius: var(--vscode-cornerRadius-medium);
+	border-bottom-right-radius: var(--vscode-cornerRadius-medium);
+	overflow: hidden;
+}
+
+/* Keep the active card quiet while preserving a clear keyboard focus indicator. */
+.agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .header .header-content,
+.agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .editorParent {
+	border-color: color-mix(in srgb, var(--vscode-focusBorder) 40%, transparent);
+}
+
+.agent-sessions-workbench .part.editor .multiDiffEntry .header:focus-visible .header-content {
+	border-color: var(--vscode-focusBorder);
+}
+
+.hc-black .agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .header .header-content,
+.hc-black .agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .editorParent,
+.hc-light .agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .header .header-content,
+.hc-light .agent-sessions-workbench .part.editor .multiDiffEntry:focus-within .editorParent {
+	border-color: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
 }
 
 .agent-sessions-workbench .part.editor .diff-hidden-lines .center {
