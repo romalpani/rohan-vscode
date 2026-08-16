@@ -37,6 +37,11 @@
 	background-color: var(--vscode-toolbar-hoverBackground);
 }
 
+.command-center .agent-sessions-titlebar-container.editing,
+.command-center .agent-sessions-titlebar-container.editing:hover {
+	background-color: transparent;
+}
+
 .command-center .agent-sessions-titlebar-container.interactive:focus-visible {
 	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
 	outline-offset: calc(-1 * var(--vscode-strokeThickness));
@@ -83,6 +88,25 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.command-center .agent-sessions-titlebar-container .agent-sessions-titlebar-title-input {
+	flex: 1 1 240px;
+	min-width: 120px;
+	width: min(320px, 32vw);
+	height: 22px;
+	box-sizing: border-box;
+	padding: 0 var(--vscode-spacing-size60);
+	font: inherit;
+	color: var(--vscode-input-foreground);
+	background-color: var(--vscode-input-background);
+	border: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	border-radius: var(--vscode-cornerRadius-small);
+	outline: none;
+}
+
+.command-center .agent-sessions-titlebar-container .agent-sessions-titlebar-title-input::selection {
+	background-color: var(--vscode-editor-selectionBackground);
 }
 
 /* Workspace name - secondary, dimmed label shown after the session title.

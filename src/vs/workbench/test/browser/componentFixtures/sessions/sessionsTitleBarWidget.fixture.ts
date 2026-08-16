@@ -9,7 +9,7 @@ import { IObservable, constObservable } from '../../../../../base/common/observa
 import { mock } from '../../../../../base/test/common/mock.js';
 import { SubmenuItemAction } from '../../../../../platform/actions/common/actions.js';
 // eslint-disable-next-line local/code-import-patterns
-import { ISessionWorkspace } from '../../../../../sessions/services/sessions/common/session.js';
+import { ISessionCapabilities, ISessionWorkspace } from '../../../../../sessions/services/sessions/common/session.js';
 // eslint-disable-next-line local/code-import-patterns
 import { IActiveSession } from '../../../../../sessions/services/sessions/common/sessionsManagement.js';
 // eslint-disable-next-line local/code-import-patterns
@@ -30,6 +30,7 @@ function createMockActiveSession(title: string, workspaceLabel: string | undefin
 		override readonly icon = Codicon.copilot;
 		override readonly title: IObservable<string> = constObservable(title);
 		override readonly workspace: IObservable<ISessionWorkspace | undefined> = constObservable(workspace);
+		override readonly capabilities: IObservable<ISessionCapabilities> = constObservable({ supportsMultipleChats: false, supportsRename: true });
 		override readonly isQuickChat: IObservable<boolean> = constObservable<boolean>(false);
 		override readonly isCreated: IObservable<boolean> = constObservable(isCreated);
 	}();
@@ -37,6 +38,7 @@ function createMockActiveSession(title: string, workspaceLabel: string | undefin
 
 interface ITitleBarState {
 	readonly activeSession: IActiveSession;
+	readonly editing?: boolean;
 }
 
 // ============================================================================
@@ -75,6 +77,9 @@ function renderTitleBar(ctx: ComponentFixtureContext, state: ITitleBarState): vo
 
 	const widget = disposableStore.add(instantiationService.createInstance(SessionsTitleBarWidget, action, undefined));
 	widget.render(widgetHost);
+	if (state.editing) {
+		widget.startTitleEditing();
+	}
 }
 
 // ============================================================================
@@ -92,6 +97,13 @@ export default defineThemedFixtureGroup({ path: 'sessions/' }, {
 	SessionsTitleBar_LongTitle: defineComponentFixture({
 		render: (ctx) => renderTitleBar(ctx, {
 			activeSession: createMockActiveSession('Investigate authentication redirect behavior across desktop and web clients', 'vscode'),
+		}),
+	}),
+
+	SessionsTitleBar_Editing: defineComponentFixture({
+		render: (ctx) => renderTitleBar(ctx, {
+			activeSession: createMockActiveSession('Fix authentication redirect loop', 'vscode'),
+			editing: true,
 		}),
 	}),
 

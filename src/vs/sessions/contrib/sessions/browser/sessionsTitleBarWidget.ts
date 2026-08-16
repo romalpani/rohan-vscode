@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/sessionsTitleBarWidget.css';
-import { $, addDisposableGenericMouseDownListener, addDisposableListener, EventType, reset } from '../../../../base/browser/dom.js';
-import { combinedDisposable, Disposable, DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
+import { $, addDisposableGenericMouseDownListener, addDisposableListener, addStandardDisposableListener, EventType, reset } from '../../../../base/browser/dom.js';
+import { IKeyboardEvent } from '../../../../base/browser/keyboardEvent.js';
+import { onUnexpectedError } from '../../../../base/common/errors.js';
+import { KeyCode } from '../../../../base/common/keyCodes.js';
+import { combinedDisposable, Disposable, DisposableStore, IDisposable, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { localize } from '../../../../nls.js';
 import { BaseActionViewItem, IBaseActionViewItemOptions } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
@@ -21,19 +24,20 @@ import { autorun } from '../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { IsAuxiliaryWindowContext } from '../../../../workbench/common/contextkeys.js';
 import { SessionSupportsRenameContext, SessionsWelcomeVisibleContext } from '../../../common/contextkeys.js';
-import { RENAME_SESSION_COMMAND_ID } from '../../../common/sessionCommands.js';
 import { SHOW_SESSIONS_PICKER_COMMAND_ID } from './sessionsActions.js';
 import { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import { getUntitledSessionTitle } from '../../../services/sessions/common/session.js';
+import { IActiveSession, ISessionsManagementService } from '../../../services/sessions/common/sessionsManagement.js';
 import { IBlockedSessionsHeaderActionContext } from './blockedSessionsList.js';
 
 const SHOW_ALL_SESSIONS_FROM_BLOCKED_LIST_COMMAND_ID = 'sessions.blockedSessions.showAllSessions';
 const IGNORE_ALL_INPUT_NEEDED_COMMAND_ID = 'sessions.blockedSessions.ignoreAllInputNeeded';
 const HIDE_BLOCKED_SESSIONS_COMMAND_ID = 'sessions.blockedSessions.hide';
+const RENAME_SESSION_IN_TITLE_BAR_COMMAND_ID = 'sessions.renameSessionInTitleBar';
 
 MenuRegistry.appendMenuItem(Menus.TitleBarSessionActions, {
 	command: {
-		id: RENAME_SESSION_COMMAND_ID,
+		id: RENAME_SESSION_IN_TITLE_BAR_COMMAND_ID,
 		title: localize('renameSession', "Rename..."),
 	},
 	group: '1_session',
@@ -89,11 +93,16 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 	private _container: HTMLElement | undefined;
 	private _lastRenderState: string | undefined;
 	private readonly _renderDisposables = this._register(new DisposableStore());
+	private readonly _editingDisposables = this._register(new MutableDisposable<DisposableStore>());
+	private _titleElement: HTMLElement | undefined;
+	private _renameInput: HTMLInputElement | undefined;
+	private _editingSession: IActiveSession | undefined;
 
 	constructor(
 		action: SubmenuItemAction,
 		options: IBaseActionViewItemOptions | undefined,
 		@ISessionsService private readonly sessionsService: ISessionsService,
+		@ISessionsManagementService private readonly sessionsManagementService: ISessionsManagementService,
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 	) {
 		super(undefined, action, options);
@@ -135,6 +144,13 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 		const sessionTitle = this._getSessionTitle();
 		const workspaceLabel = this._getRepositoryLabel();
 		const isCreated = this.sessionsService.activeSession.get()?.isCreated.get() ?? false;
+		const activeSession = this.sessionsService.activeSession.get();
+		if (this._renameInput) {
+			if (activeSession === this._editingSession) {
+				return;
+			}
+			this._endTitleEditing();
+		}
 		const renderState = `${icon?.id ?? ''}|${sessionTitle}|${workspaceLabel ?? ''}|${isCreated}`;
 		if (this._lastRenderState === renderState) {
 			return;
@@ -142,6 +158,7 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 		this._lastRenderState = renderState;
 
 		reset(this._container);
+		this._titleElement = undefined;
 		this._renderDisposables.clear();
 		const session = this.sessionsService.activeSession.get();
 		const isInteractive = !!session && isCreated;
@@ -207,9 +224,9 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 
 		// Session title shown next to the icon
 		if (sessionTitle) {
-			const titleEl = $('div.agent-sessions-titlebar-title');
-			titleEl.textContent = sessionTitle;
-			centerGroup.appendChild(titleEl);
+			this._titleElement = $('div.agent-sessions-titlebar-title');
+			this._titleElement.textContent = sessionTitle;
+			centerGroup.appendChild(this._titleElement);
 		}
 
 		// Workspace name shown after the session title
@@ -225,6 +242,79 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 		sessionPill.appendChild(centerGroup);
 
 		container.appendChild(sessionPill);
+	}
+
+	startTitleEditing(): void {
+		const session = this.sessionsService.activeSession.get();
+		if (!session?.capabilities.get().supportsRename || this._renameInput || !this._titleElement) {
+			return;
+		}
+
+		const initialTitle = session.title.get();
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'agent-sessions-titlebar-title-input';
+		input.value = initialTitle;
+		input.placeholder = getUntitledSessionTitle(session.isQuickChat?.get() ?? false);
+		input.setAttribute('aria-label', localize('renameSession.aria', "Rename session"));
+		input.spellcheck = false;
+
+		this._titleElement.style.display = 'none';
+		this._titleElement.insertAdjacentElement('afterend', input);
+		this._container?.classList.add('editing');
+		this._container?.removeAttribute('role');
+		this._container?.removeAttribute('aria-haspopup');
+		this._container?.removeAttribute('aria-label');
+		if (this._container) {
+			this._container.tabIndex = -1;
+		}
+		this._renameInput = input;
+		this._editingSession = session;
+
+		input.focus();
+		input.select();
+
+		const store = new DisposableStore();
+		this._editingDisposables.value = store;
+		let finished = false;
+		const finish = (commit: boolean) => {
+			if (finished) {
+				return;
+			}
+			finished = true;
+			const newTitle = input.value.trim();
+			this._endTitleEditing();
+			if (commit && newTitle && newTitle !== initialTitle.trim()) {
+				this.sessionsManagementService.renameSession(session, newTitle).catch(onUnexpectedError);
+			}
+		};
+
+		store.add(addStandardDisposableListener(input, EventType.KEY_DOWN, (event: IKeyboardEvent) => {
+			if (event.equals(KeyCode.Enter)) {
+				event.preventDefault();
+				event.stopPropagation();
+				finish(true);
+			} else if (event.equals(KeyCode.Escape)) {
+				event.preventDefault();
+				event.stopPropagation();
+				finish(false);
+			} else {
+				event.stopPropagation();
+			}
+		}));
+		store.add(addDisposableListener(input, EventType.BLUR, () => finish(false)));
+		store.add(addDisposableGenericMouseDownListener(input, event => event.stopPropagation()));
+		store.add(addDisposableListener(input, EventType.CLICK, event => event.stopPropagation()));
+	}
+
+	private _endTitleEditing(): void {
+		this._renameInput?.remove();
+		this._renameInput = undefined;
+		this._editingSession = undefined;
+		this._editingDisposables.clear();
+		this._lastRenderState = undefined;
+		this._container?.classList.remove('editing');
+		this._render();
 	}
 
 	/**
@@ -270,7 +360,7 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 
 	private _showSessionActions(): void {
 		const session = this.sessionsService.activeSession.get();
-		if (!session?.isCreated.get() || !this._container) {
+		if (this._renameInput || !session?.isCreated.get() || !this._container) {
 			return;
 		}
 		this.contextMenuService.showContextMenu({
@@ -296,6 +386,9 @@ export class SessionsTitleBarContribution extends Disposable implements IWorkben
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
+		let titleBarWidget: SessionsTitleBarWidget | undefined;
+
+		this._register(CommandsRegistry.registerCommand(RENAME_SESSION_IN_TITLE_BAR_COMMAND_ID, () => titleBarWidget?.startTitleEditing()));
 
 		// Register the submenu item in the Agent Sessions command center
 		this._register(MenuRegistry.appendMenuItem(Menus.CommandCenter, {
@@ -320,7 +413,7 @@ export class SessionsTitleBarContribution extends Disposable implements IWorkben
 			if (!(action instanceof SubmenuItemAction)) {
 				return undefined;
 			}
-			return instantiationService.createInstance(SessionsTitleBarWidget, action, options);
+			return titleBarWidget = instantiationService.createInstance(SessionsTitleBarWidget, action, options);
 		}, undefined));
 	}
 }
