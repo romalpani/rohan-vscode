@@ -244,12 +244,16 @@ suite('Sessions rename', () => {
 
 			assert.deepStrictEqual({
 				hasTitleActions: content.includes('session title\'s actions menu'),
+				hasInlineSave: content.includes('press Enter to save'),
+				hasInlineCancel: content.includes('Escape to cancel'),
 				hasDoubleClick: content.includes('double-click its title'),
 				hasContextMenu: content.includes('open its context menu'),
 				activeElement: mainWindow.document.activeElement,
 				fallbackFocusCount: fallbackFocusCount(),
 			}, {
 				hasTitleActions: true,
+				hasInlineSave: true,
+				hasInlineCancel: true,
 				hasDoubleClick: true,
 				hasContextMenu: true,
 				activeElement: origin,
