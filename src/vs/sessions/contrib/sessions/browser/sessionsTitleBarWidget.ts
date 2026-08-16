@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/sessionsTitleBarWidget.css';
-import { $, reset } from '../../../../base/browser/dom.js';
-import { combinedDisposable, Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
+import { $, addDisposableGenericMouseDownListener, addDisposableListener, EventType, reset } from '../../../../base/browser/dom.js';
+import { combinedDisposable, Disposable, DisposableStore, IDisposable } from '../../../../base/common/lifecycle.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { localize } from '../../../../nls.js';
 import { BaseActionViewItem, IBaseActionViewItemOptions } from '../../../../base/browser/ui/actionbar/actionViewItems.js';
@@ -13,13 +13,15 @@ import { IInstantiationService } from '../../../../platform/instantiation/common
 import { MenuRegistry, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { Menus } from '../../../browser/menus.js';
 import { IWorkbenchContribution } from '../../../../workbench/common/contributions.js';
 import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
 import { autorun } from '../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { IsAuxiliaryWindowContext } from '../../../../workbench/common/contextkeys.js';
-import { SessionsWelcomeVisibleContext } from '../../../common/contextkeys.js';
+import { SessionSupportsRenameContext, SessionsWelcomeVisibleContext } from '../../../common/contextkeys.js';
+import { RENAME_SESSION_COMMAND_ID } from '../../../common/sessionCommands.js';
 import { SHOW_SESSIONS_PICKER_COMMAND_ID } from './sessionsActions.js';
 import { ISessionsService } from '../../../services/sessions/browser/sessionsService.js';
 import { getUntitledSessionTitle } from '../../../services/sessions/common/session.js';
@@ -28,6 +30,16 @@ import { IBlockedSessionsHeaderActionContext } from './blockedSessionsList.js';
 const SHOW_ALL_SESSIONS_FROM_BLOCKED_LIST_COMMAND_ID = 'sessions.blockedSessions.showAllSessions';
 const IGNORE_ALL_INPUT_NEEDED_COMMAND_ID = 'sessions.blockedSessions.ignoreAllInputNeeded';
 const HIDE_BLOCKED_SESSIONS_COMMAND_ID = 'sessions.blockedSessions.hide';
+
+MenuRegistry.appendMenuItem(Menus.TitleBarSessionActions, {
+	command: {
+		id: RENAME_SESSION_COMMAND_ID,
+		title: localize('renameSession', "Rename..."),
+	},
+	group: '1_session',
+	order: 4,
+	when: SessionSupportsRenameContext,
+});
 
 export function registerBlockedSessionsHeaderActions(): IDisposable {
 	return combinedDisposable(
@@ -76,11 +88,13 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 
 	private _container: HTMLElement | undefined;
 	private _lastRenderState: string | undefined;
+	private readonly _renderDisposables = this._register(new DisposableStore());
 
 	constructor(
 		action: SubmenuItemAction,
 		options: IBaseActionViewItemOptions | undefined,
 		@ISessionsService private readonly sessionsService: ISessionsService,
+		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 	) {
 		super(undefined, action, options);
 		this._register(autorun(reader => {
@@ -102,11 +116,15 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 		this._render();
 	}
 
-	override setFocusable(_focusable: boolean): void {
-		this._container?.setAttribute('tabindex', '-1');
+	override setFocusable(focusable: boolean): void {
+		if (this._container) {
+			this._container.tabIndex = focusable && this.sessionsService.activeSession.get()?.isCreated.get() ? 0 : -1;
+		}
 	}
 
-	override onClick(): void { }
+	override onClick(): void {
+		this._showSessionActions();
+	}
 
 	private _render(): void {
 		if (!this._container) {
@@ -116,17 +134,42 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 		const icon = this._getActiveSessionIcon();
 		const sessionTitle = this._getSessionTitle();
 		const workspaceLabel = this._getRepositoryLabel();
-		const renderState = `${icon?.id ?? ''}|${sessionTitle}|${workspaceLabel ?? ''}`;
+		const isCreated = this.sessionsService.activeSession.get()?.isCreated.get() ?? false;
+		const renderState = `${icon?.id ?? ''}|${sessionTitle}|${workspaceLabel ?? ''}|${isCreated}`;
 		if (this._lastRenderState === renderState) {
 			return;
 		}
 		this._lastRenderState = renderState;
 
 		reset(this._container);
-		this._container.removeAttribute('role');
-		this._container.removeAttribute('aria-label');
-		this._container.tabIndex = -1;
+		this._renderDisposables.clear();
+		const session = this.sessionsService.activeSession.get();
+		const isInteractive = !!session && isCreated;
+		this._container.classList.toggle('interactive', isInteractive);
+		this._container.classList.toggle('static', !isInteractive);
+		if (isInteractive) {
+			this._container.setAttribute('role', 'button');
+			this._container.setAttribute('aria-haspopup', 'menu');
+			this._container.setAttribute('aria-label', workspaceLabel
+				? localize('showSessionActionsWithWorkspace', "{0}, {1}, Show Session Actions", sessionTitle, workspaceLabel)
+				: localize('showSessionActionsForSession', "{0}, Show Session Actions", sessionTitle));
+			this._container.tabIndex = 0;
+		} else {
+			this._container.removeAttribute('role');
+			this._container.removeAttribute('aria-haspopup');
+			this._container.removeAttribute('aria-label');
+			this._container.tabIndex = -1;
+		}
 		this._renderActiveSession();
+		if (isInteractive) {
+			this._renderDisposables.add(addDisposableListener(this._container, EventType.KEY_DOWN, event => {
+				if (event.key === 'Enter' || event.key === ' ') {
+					event.preventDefault();
+					event.stopPropagation();
+					this._showSessionActions();
+				}
+			}));
+		}
 	}
 
 	/**
@@ -141,6 +184,17 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 
 		// Session pill: icon + title + workspace together
 		const sessionPill = $('div.agent-sessions-titlebar-pill');
+		if (this.sessionsService.activeSession.get()?.isCreated.get()) {
+			this._renderDisposables.add(addDisposableGenericMouseDownListener(sessionPill, event => {
+				event.preventDefault();
+				event.stopPropagation();
+			}));
+			this._renderDisposables.add(addDisposableListener(sessionPill, EventType.CLICK, event => {
+				event.preventDefault();
+				event.stopPropagation();
+				this._showSessionActions();
+			}));
+		}
 
 		// Center group: icon + title + workspace name
 		const centerGroup = $('div.agent-sessions-titlebar-center');
@@ -212,6 +266,18 @@ export class SessionsTitleBarWidget extends BaseActionViewItem {
 			}
 		}
 		return undefined;
+	}
+
+	private _showSessionActions(): void {
+		const session = this.sessionsService.activeSession.get();
+		if (!session?.isCreated.get() || !this._container) {
+			return;
+		}
+		this.contextMenuService.showContextMenu({
+			menuId: Menus.TitleBarSessionActions,
+			menuActionOptions: { shouldForwardArgs: true, arg: session },
+			getAnchor: () => this._container!,
+		});
 	}
 
 }

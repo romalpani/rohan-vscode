@@ -96,18 +96,7 @@ suite('Sessions - SessionHeader', () => {
 		assert.strictEqual(dragEvent.defaultPrevented, true, 'drag-start originating in the meta row must be prevented so the underlying click is not swallowed');
 	});
 
-	test('a small pointer move over the title actions toolbar does not start a session drag', () => {
-		const { header } = createHarness(disposables);
-
-		const titleActions = header.element.querySelector<HTMLElement>('.chat-composite-bar-title-actions');
-		assert.ok(titleActions, 'title actions should be rendered');
-
-		const dragEvent = simulateDragFrom(header, titleActions);
-
-		assert.strictEqual(dragEvent.defaultPrevented, true);
-	});
-
-	test('renders metadata and actions in one row without a duplicate session title', () => {
+	test('renders metadata without duplicate title or actions', () => {
 		const { header } = createHarness(disposables);
 		const row = header.element.querySelector('.chat-composite-bar-header');
 
@@ -119,7 +108,6 @@ suite('Sessions - SessionHeader', () => {
 			children: [
 				'chat-composite-bar-session-icon',
 				'chat-composite-bar-meta-row',
-				'chat-composite-bar-title-actions',
 			],
 		});
 	});

@@ -56,14 +56,6 @@
 	color: var(--session-view-foreground);
 }
 
-.chat-composite-bar-title-actions {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	flex-shrink: 0;
-	margin-left: auto;
-}
-
 /* Metadata: workspace + contributed changes / pull request buttons.
 	No `overflow: hidden` here — it would clip the meta buttons' focus ring at the
 	row height. The workspace label self-truncates via its own containers. */
@@ -219,13 +211,6 @@
 	display: flex;
 	align-items: center;
 	flex-shrink: 0;
-}
-
-/* Keep header toolbar buttons from dictating the row height */
-.chat-composite-bar-title-actions .action-item .action-label {
-	height: 20px;
-	line-height: 20px;
-	padding: 0 2px;
 }
 
 .chat-composite-bar-toolbar .monaco-action-bar .actions-container {

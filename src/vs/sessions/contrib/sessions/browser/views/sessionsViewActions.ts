@@ -860,7 +860,7 @@ abstract class BaseArchiveSessionAction extends Action2 {
 				order: 2,
 				when: ContextKeyExpr.equals(SessionIsArchivedContext.key, false),
 			}, {
-				id: Menus.SessionBarToolbar,
+				id: Menus.TitleBarSessionActions,
 				group: '1_session',
 				order: 5,
 				when: ContextKeyExpr.and(SessionIsCreatedContext, ContextKeyExpr.equals(SessionIsArchivedContext.key, false)),
@@ -909,7 +909,7 @@ abstract class BaseUnarchiveSessionAction extends Action2 {
 				order: 2,
 				when: ContextKeyExpr.equals(SessionIsArchivedContext.key, true),
 			}, {
-				id: Menus.SessionBarToolbar,
+				id: Menus.TitleBarSessionActions,
 				group: 'navigation',
 				order: 5,
 				when: ContextKeyExpr.equals(SessionIsArchivedContext.key, true),
@@ -1051,6 +1051,14 @@ registerAction2(class MarkSessionReadAction extends Action2 {
 					SessionIsReadContext.negate(),
 					SessionIsArchivedContext.negate(),
 				),
+			}, {
+				id: Menus.TitleBarSessionActions,
+				group: '2_read',
+				order: 0,
+				when: ContextKeyExpr.and(
+					SessionIsReadContext.negate(),
+					SessionIsArchivedContext.negate(),
+				),
 			}]
 		});
 	}
@@ -1080,6 +1088,14 @@ registerAction2(class MarkSessionUnreadAction extends Action2 {
 			}, {
 				id: Menus.SessionHeaderContext,
 				group: '3_read',
+				order: 0,
+				when: ContextKeyExpr.and(
+					SessionIsReadContext,
+					SessionIsArchivedContext.negate(),
+				),
+			}, {
+				id: Menus.TitleBarSessionActions,
+				group: '2_read',
 				order: 0,
 				when: ContextKeyExpr.and(
 					SessionIsReadContext,

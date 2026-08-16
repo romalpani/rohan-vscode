@@ -140,12 +140,14 @@ The account widget shows overlapping provider identities only for accounts that 
 
 ### Session Identity (Center)
 
-For an active session, the center section shows a passive session identity with:
+For an active session, the center section shows the session identity with:
 - **Provider icon** — the session type icon (e.g. Copilot CLI, Cloud)
 - **Session title** — the AI-generated or user-assigned session title
 - **Workspace name** — the repository or folder name
 
-Drafts use **New session** (or **New chat** for a quick chat) until they receive a title. When no session is active, the center is empty. The identity is not interactive; session-level commands remain in the in-content session header alongside the metadata pills. The title remains the active-session identity when the session needs input or an approval completes; those states do not replace it. Back and forward arrows appear beside the identity only while the primary sidebar is hidden, because the visible sessions list already provides direct navigation.
+Drafts use **New session** (or **New chat** for a quick chat) until they receive a title. Draft identity is passive and draft actions remain in the floating session toolbar. When no session is active, the center is empty.
+
+For a created session, the identity is a menu button. Clicking it or pressing Enter or Space opens `Menus.TitleBarSessionActions`, which owns session-level commands such as New Chat, Chats, Rename, Pin, Close, Maximize/Restore, Archive/Restore, and Mark Read/Unread. The in-content session header retains only status and contributed metadata pills. The title remains the active-session identity when the session needs input or an approval completes; those states do not replace it. Back and forward arrows appear beside the identity only while the primary sidebar is hidden, because the visible sessions list already provides direct navigation.
 
 In the single-pane layout, activating the session header **Changes** pill is treated as an explicit
 editor open: it reveals the docked editor area and opens the Changes multi-diff editor even though
