@@ -33,7 +33,16 @@
 	cursor: default;
 }
 
-/* Session identity fills the titlebar slot without introducing an interaction. */
+.command-center .agent-sessions-titlebar-container.interactive:hover {
+	background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.command-center .agent-sessions-titlebar-container.interactive:focus-visible {
+	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);
+	outline-offset: calc(-1 * var(--vscode-strokeThickness));
+}
+
+/* Session identity fills the titlebar slot and opens session actions once created. */
 .command-center .agent-sessions-titlebar-container .agent-sessions-titlebar-pill {
 	display: flex;
 	justify-content: space-around;
@@ -43,6 +52,11 @@
 	min-width: 0;
 	max-width: 100%;
 	height: 100%;
+}
+
+.command-center .agent-sessions-titlebar-container.interactive .agent-sessions-titlebar-pill {
+	cursor: pointer;
+	touch-action: manipulation;
 }
 
 /* Center group: icon + label + folder */

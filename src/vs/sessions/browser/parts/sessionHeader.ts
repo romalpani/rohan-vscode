@@ -64,9 +64,7 @@ export class SessionHeader extends Disposable {
 	private readonly _container: HTMLElement;
 	private readonly _iconEl: HTMLElement;
 	private readonly _metaRow: HTMLElement;
-	private readonly _toolbar: MenuWorkbenchToolBar;
 	private readonly _metaToolbar: MenuWorkbenchToolBar;
-	private readonly _titleActionsEl: HTMLElement;
 
 	private readonly _sessionDisposables = this._register(new MutableDisposable<DisposableStore>());
 	private _session: IActiveSession | undefined;
@@ -123,21 +121,6 @@ export class SessionHeader extends Disposable {
 
 		this._metaRow = $('.chat-composite-bar-meta-row');
 		header.appendChild(this._metaRow);
-
-		const titleActions = $('.chat-composite-bar-title-actions');
-		header.appendChild(titleActions);
-		this._titleActionsEl = titleActions;
-
-		const toolbarContainer = $('.chat-composite-bar-toolbar');
-		titleActions.appendChild(toolbarContainer);
-		this._toolbar = this._register(instantiationService.createInstance(MenuWorkbenchToolBar, toolbarContainer, Menus.SessionBarToolbar, {
-			hiddenItemStrategy: HiddenItemStrategy.Ignore,
-			menuOptions: { shouldForwardArgs: true },
-			highlightToggledItems: true,
-			// Render every group in the primary slot with a separator between groups
-			// so the actions stay visually grouped.
-			toolbarOptions: { primaryGroup: () => true, useSeparatorsInPrimaryActions: true },
-		}));
 
 		// Session header meta toolbar. Actions are contributed into the generic
 		// Menus.SessionHeaderMeta menu: the files view contributes the workspace
@@ -221,9 +204,9 @@ export class SessionHeader extends Disposable {
 				return;
 			}
 
-			// Don't swallow a click on the toolbar or meta row pills into a session drag.
+			// Don't swallow a click on the metadata pills into a session drag.
 			const target = this._lastPointerDownTarget;
-			if (target && (this._titleActionsEl.contains(target) || this._metaRow.contains(target))) {
+			if (target && this._metaRow.contains(target)) {
 				e.preventDefault();
 				return;
 			}
@@ -253,7 +236,6 @@ export class SessionHeader extends Disposable {
 			return;
 		}
 		this._session = session;
-		this._toolbar.context = session;
 		this._metaToolbar.context = session;
 		this._statusIcon.reset();
 

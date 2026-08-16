@@ -11,7 +11,7 @@ import { autorun, IReader, observableSignalFromEvent } from '../../../../base/co
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { localize, localize2 } from '../../../../nls.js';
-import { Action2, MenuRegistry, MenuId, registerAction2, MenuItemAction, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
+import { Action2, MenuRegistry, MenuId, registerAction2, MenuItemAction } from '../../../../platform/actions/common/actions.js';
 import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
 import { ContextKeyExpr, IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { InputFocusedContext } from '../../../../platform/contextkey/common/contextkeys.js';
@@ -54,7 +54,6 @@ import { logSessionsInteraction, SessionsInteractionSource } from '../../../comm
 import { NEW_SESSION_ACTION_ID } from '../../chat/common/constants.js';
 import { groupSessionsForPicker } from './sessionsPicker.js';
 import { getSessionConversationActionId, getSessionConversationGroupId } from '../../../browser/sessionConversationGroups.js';
-import { SessionConversationsActionViewItem } from '../../../browser/parts/sessionConversationsActionViewItem.js';
 import './media/newSessionActionViewItem.css';
 
 // -- Show Sessions Picker --
@@ -551,10 +550,10 @@ registerAction2(class AddChatToSessionAction extends Action2 {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyT,
 			},
 			menu: {
-				id: Menus.SessionBarToolbar,
+				id: Menus.TitleBarSessionActions,
 				group: 'navigation',
 				order: 0,
-				when: ContextKeyExpr.and(SessionIsCreatedContext, SessionSupportsMultipleChatsContext, SessionIsArchivedContext.negate(), SessionShouldShowChatTabsContext.negate()),
+				when: ContextKeyExpr.and(SessionIsCreatedContext, SessionSupportsMultipleChatsContext, SessionIsArchivedContext.negate()),
 			},
 		});
 	}
@@ -1264,89 +1263,16 @@ export class NewSessionActionViewItemContribution extends Disposable implements 
 	}
 }
 
-/**
- * Renders the "New Chat" action in the session header as the compact pill, matching the
- * "New" session pill in the sessions list header / titlebar.
- */
-class NewChatActionViewItem extends CompactButtonActionViewItem {
-
-	protected override get commandId(): string {
-		return ADD_CHAT_TO_SESSION_ACTION_ID;
-	}
-
-	protected override get label(): string {
-		return localize('chatCompositeBar.addChat.compact', "New Chat");
-	}
-
-	protected override get showKeybindingHint(): boolean {
-		return false;
-	}
-
-	protected override getHoverContent(keybindingLabel: string | undefined): string {
-		return keybindingLabel
-			? localize('newChatButtonTitle', "New Chat ({0})", keybindingLabel)
-			: localize('newChatButtonTitleWithoutKeybinding', "New Chat");
-	}
-
-	protected override getAriaLabel(keybindingAriaLabel: string | undefined): string {
-		return keybindingAriaLabel
-			? localize('newChatButtonAriaLabel', "New Chat ({0})", keybindingAriaLabel)
-			: localize('newChatButtonAriaLabelWithoutKeybinding', "New Chat");
-	}
-}
-
-export class SessionNewChatActionViewItemContribution extends Disposable implements IWorkbenchContribution {
-
-	static readonly ID = 'workbench.contrib.sessions.newChatActionViewItem';
-
-	constructor(
-		@IActionViewItemService actionViewItemService: IActionViewItemService,
-	) {
-		super();
-
-		// Fire once after registering so a header toolbar that was already built
-		// (e.g. for a session restored before this contribution runs) re-renders and
-		// picks up this factory; otherwise New Chat stays icon-only until its menu
-		// next changes.
-		const onDidRegister = this._register(new Emitter<void>());
-		this._register(actionViewItemService.register(Menus.SessionBarToolbar, ADD_CHAT_TO_SESSION_ACTION_ID, (action, _options, instantiationService) => {
-			if (!(action instanceof MenuItemAction)) {
-				return undefined;
-			}
-			return instantiationService.createInstance(NewChatActionViewItem, action);
-		}, onDidRegister.event));
-		onDidRegister.fire();
-	}
-}
-
-export class SessionConversationsActionViewItemContribution extends Disposable implements IWorkbenchContribution {
-
-	static readonly ID = 'workbench.contrib.sessions.conversationsActionViewItem';
-
-	constructor(
-		@IActionViewItemService actionViewItemService: IActionViewItemService,
-	) {
-		super();
-		this._register(actionViewItemService.register(Menus.SessionHeaderMeta, Menus.SessionConversations, (action, _options, instantiationService) => {
-			if (!(action instanceof SubmenuItemAction)) {
-				return undefined;
-			}
-			return instantiationService.createInstance(SessionConversationsActionViewItem, action);
-		}));
-	}
-}
-
 // The "Chats" toolbar entry is backed by a submenu whose groups are rendered by
 // the Sessions workbench as an Action Widget dropdown. Selecting an entry opens
 // or focuses that chat.
 //
-// It is always rendered in the session header meta row, after the pills
-// (workspace folder / changes / pull request) as the meta toolbar's default
-// dropdown icon, independent of whether the chat tab strip is shown. It surfaces
+// It is rendered in the titlebar session actions menu, independent of whether
+// the chat tab strip is shown. It surfaces
 // once the session has more than one committed chat, or when the active chat has
 // subagents (a separate group at the bottom lists them) even if that is the only
 // committed chat.
-MenuRegistry.appendMenuItem(Menus.SessionHeaderMeta, {
+MenuRegistry.appendMenuItem(Menus.TitleBarSessionActions, {
 	submenu: Menus.SessionConversations,
 	title: localize2('chatCompositeBar.conversations', "Chats"),
 	icon: Codicon.commentDiscussion,
@@ -1357,12 +1283,8 @@ MenuRegistry.appendMenuItem(Menus.SessionHeaderMeta, {
 
 /**
  * Populates the {@link Menus.SessionConversations} menu for every visible
- * session. {@link Menus.SessionBarToolbar} is rendered once per session view
- * (header/floating toolbar) against that view's scoped context key service, so
- * the menu items are scoped per session via {@link SessionIdContext}: each
- * session's per-chat navigation actions only render in (and act on) their own
- * session's toolbar. The actions are (re)registered whenever the set of visible
- * sessions or their chat lists change.
+ * session. Menu items are scoped per session via {@link SessionIdContext}; the
+ * actions are re-registered whenever visible sessions or their chat lists change.
  */
 export class SessionConversationsMenuContribution extends Disposable implements IWorkbenchContribution {
 
@@ -1459,7 +1381,7 @@ registerAction2(class TogglePinSessionAction extends Action2 {
 				title: localize('chatCompositeBar.unpin', "Unpin Session"),
 			},
 			menu: {
-				id: Menus.SessionBarToolbar,
+				id: Menus.TitleBarSessionActions,
 				group: '1_session',
 				order: 10,
 				when: ContextKeyExpr.and(SessionIsCreatedContext, SessionIsArchivedContext.negate()),
@@ -1523,6 +1445,11 @@ registerAction2(class CloseSessionAction extends Action2 {
 				group: '1_session',
 				order: 30,
 			}, {
+				id: Menus.TitleBarSessionActions,
+				when: SessionIsCreatedContext,
+				group: '1_session',
+				order: 30,
+			}, {
 				id: Menus.SessionHeaderContext,
 				when: ContextKeyExpr.or(SessionIsCreatedContext, MultipleSessionsVisibleContext),
 				group: '1_view',
@@ -1551,12 +1478,17 @@ registerAction2(class ToggleMaximizeSessionViewAction extends Action2 {
 				icon: Codicon.screenNormal,
 				title: localize('chatCompositeBar.unmaximize', "Restore Session"),
 			},
-			menu: {
+			menu: [{
 				id: Menus.SessionBarToolbar,
 				when: MultipleSessionsVisibleContext,
 				group: '1_session',
 				order: 20,
-			},
+			}, {
+				id: Menus.TitleBarSessionActions,
+				when: MultipleSessionsVisibleContext,
+				group: '1_session',
+				order: 20,
+			}],
 		});
 	}
 

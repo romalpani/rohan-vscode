@@ -8,16 +8,51 @@ import { Codicon } from '../../../../../base/common/codicons.js';
 import { constObservable, IObservable } from '../../../../../base/common/observable.js';
 import { mock } from '../../../../../base/test/common/mock.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { SubmenuItemAction } from '../../../../../platform/actions/common/actions.js';
+import { isIMenuItem, isISubmenuItem, MenuRegistry, SubmenuItemAction } from '../../../../../platform/actions/common/actions.js';
+import { IContextMenuMenuDelegate, IContextMenuService } from '../../../../../platform/contextview/browser/contextView.js';
 import { ISessionWorkspace } from '../../../../services/sessions/common/session.js';
 import { IActiveSession } from '../../../../services/sessions/common/sessionsManagement.js';
 import { ISessionsService } from '../../../../services/sessions/browser/sessionsService.js';
 import { SessionsTitleBarWidget } from '../../browser/sessionsTitleBarWidget.js';
+import { Menus } from '../../../../browser/menus.js';
+import { RENAME_SESSION_COMMAND_ID } from '../../../../common/sessionCommands.js';
+import '../../browser/views/sessionsViewActions.js';
 
 suite('SessionsTitleBarWidget', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
-	test('renders passive session identity', () => {
+	test('title menu owns the created-session actions', () => {
+		const items = MenuRegistry.getMenuItems(Menus.TitleBarSessionActions);
+		const commandIds = items.filter(isIMenuItem).map(item => item.command.id).sort();
+		const submenuIds = items.filter(isISubmenuItem).map(item => item.submenu.id).sort();
+
+		assert.deepStrictEqual({
+			commandIds: commandIds.filter(id => [
+				RENAME_SESSION_COMMAND_ID,
+				'sessions.chatCompositeBar.addChat',
+				'sessions.chatCompositeBar.close',
+				'sessions.chatCompositeBar.toggleMaximize',
+				'sessions.chatCompositeBar.togglePin',
+				'sessionsViewPane.markRead',
+				'sessionsViewPane.markUnread',
+				'sessionsViewPane.unarchiveSession',
+			].includes(id)),
+			submenuIds,
+		}, {
+			commandIds: [
+				RENAME_SESSION_COMMAND_ID,
+				'sessions.chatCompositeBar.addChat',
+				'sessions.chatCompositeBar.close',
+				'sessions.chatCompositeBar.toggleMaximize',
+				'sessions.chatCompositeBar.togglePin',
+				'sessionsViewPane.markRead',
+				'sessionsViewPane.markUnread',
+			].sort(),
+			submenuIds: [Menus.SessionConversations.id],
+		});
+	});
+
+	test('renders interactive session identity', () => {
 		const workspace = new class extends mock<ISessionWorkspace>() {
 			override readonly label = 'vscode';
 		}();
@@ -39,21 +74,38 @@ suite('SessionsTitleBarWidget', () => {
 			override async run(): Promise<void> { }
 		}();
 		const container = document.createElement('div');
-		const widget = store.add(new SessionsTitleBarWidget(action, undefined, sessionsService));
+		const shownMenus: IContextMenuMenuDelegate[] = [];
+		const contextMenuService = new class extends mock<IContextMenuService>() {
+			override showContextMenu(options: IContextMenuMenuDelegate): void {
+				shownMenus.push(options);
+			}
+		}();
+		const widget = store.add(new SessionsTitleBarWidget(action, undefined, sessionsService, contextMenuService));
 		widget.render(container);
+		container.querySelector<HTMLElement>('.agent-sessions-titlebar-pill')?.click();
+		container.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		container.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
 
 		assert.deepStrictEqual({
 			title: container.querySelector('.agent-sessions-titlebar-title')?.textContent,
 			workspace: container.querySelector('.agent-sessions-titlebar-workspace')?.textContent,
 			role: container.getAttribute('role'),
 			ariaLabel: container.getAttribute('aria-label'),
+			ariaHasPopup: container.getAttribute('aria-haspopup'),
 			tabIndex: container.tabIndex,
+			menuId: shownMenus[0]?.menuId,
+			menuArg: shownMenus[0]?.menuActionOptions?.arg,
+			menuOpenCount: shownMenus.length,
 		}, {
 			title: 'Fix authentication redirect loop',
 			workspace: 'vscode',
-			role: null,
-			ariaLabel: null,
-			tabIndex: -1,
+			role: 'button',
+			ariaLabel: 'Fix authentication redirect loop, vscode, Show Session Actions',
+			ariaHasPopup: 'menu',
+			tabIndex: 0,
+			menuId: Menus.TitleBarSessionActions,
+			menuArg: session,
+			menuOpenCount: 3,
 		});
 	});
 
@@ -76,9 +128,26 @@ suite('SessionsTitleBarWidget', () => {
 			override async run(): Promise<void> { }
 		}();
 		const container = document.createElement('div');
-		const widget = store.add(new SessionsTitleBarWidget(action, undefined, sessionsService));
+		let menuShown = false;
+		const contextMenuService = new class extends mock<IContextMenuService>() {
+			override showContextMenu(): void {
+				menuShown = true;
+			}
+		}();
+		const widget = store.add(new SessionsTitleBarWidget(action, undefined, sessionsService, contextMenuService));
 		widget.render(container);
+		container.querySelector<HTMLElement>('.agent-sessions-titlebar-pill')?.click();
 
-		assert.strictEqual(container.querySelector('.agent-sessions-titlebar-title')?.textContent, 'New session');
+		assert.deepStrictEqual({
+			title: container.querySelector('.agent-sessions-titlebar-title')?.textContent,
+			role: container.getAttribute('role'),
+			tabIndex: container.tabIndex,
+			menuShown,
+		}, {
+			title: 'New session',
+			role: null,
+			tabIndex: -1,
+			menuShown: false,
+		});
 	});
 });
